@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { EditProductModal } from "@/components/marketplace/edit-product-modal";
+import { API_BASE_URL } from "@/lib/api";
 
 type ProductImage = {
   url: string;
@@ -102,7 +103,7 @@ export default function MyListingsPage() {
 
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/products/user/my-listings", {
+      const res = await fetch(`${API_BASE_URL}/api/products/user/my-listings`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -134,7 +135,7 @@ export default function MyListingsPage() {
 
     try {
       setDeletingId(productId);
-      const res = await fetch(`http://localhost:5000/api/products/${productId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`
@@ -161,7 +162,7 @@ export default function MyListingsPage() {
 
     try {
       setActionLoadingId(productId);
-      const res = await fetch(`http://localhost:5000/api/products/${productId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

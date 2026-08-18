@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
+import { API_BASE_URL } from "@/lib/api";
 
 type ProductListing = {
   _id: string;
@@ -75,7 +76,7 @@ export default function SellerDashboardPage() {
       }
 
       // Fetch user's real listings
-      const res = await fetch("http://localhost:5000/api/products/my-listings", {
+      const res = await fetch(`${API_BASE_URL}/api/products/my-listings`, {
         headers: {
           Authorization: `Bearer ${token}`
         }

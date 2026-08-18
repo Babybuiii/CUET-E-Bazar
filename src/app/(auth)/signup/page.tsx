@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
 import { CUET_DEPARTMENTS, CUET_HALLS } from "@/data/mock";
+import { API_BASE_URL } from "@/lib/api";
 
 type RoleOption = "student" | "shop_owner";
 
@@ -154,7 +155,7 @@ export default function SignupPage() {
               }
             };
 
-      const res = await fetch("http://localhost:5000/api/auth/register", {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

@@ -7,6 +7,7 @@ import { SellModal } from "@/components/marketplace/sell-modal";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, PlusCircle, ShoppingBag } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api";
 
 const CATEGORIES = [
   "All",
@@ -30,8 +31,8 @@ export default function MarketplacePage() {
       setLoading(true);
       const url =
         category === "All"
-          ? "http://localhost:5000/api/products?sort=newest"
-          : `http://localhost:5000/api/products?category=${encodeURIComponent(category)}&sort=newest`;
+          ? `${API_BASE_URL}/api/products?sort=newest`
+          : `${API_BASE_URL}/api/products?category=${encodeURIComponent(category)}&sort=newest`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {

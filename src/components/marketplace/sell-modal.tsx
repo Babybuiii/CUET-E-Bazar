@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PlusCircle, X, Upload, CheckCircle2, AlertCircle, Image as ImageIcon, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import { API_BASE_URL } from "@/lib/api";
 
 type SellModalProps = {
   isOpen: boolean;
@@ -129,7 +130,7 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
 
       const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
 
-      const res = await fetch("http://localhost:5000/api/products", {
+      const res = await fetch(`${API_BASE_URL}/api/products`, {
         method: "POST",
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})

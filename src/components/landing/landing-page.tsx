@@ -9,6 +9,7 @@ import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProductCard } from "@/components/marketplace/product-card";
+import { API_BASE_URL } from "@/lib/api";
 
 const quickMenu = ["All", "Today Deals", "Marketplace", "Giveaways", "Campus Shops", "Customer Service"];
 
@@ -22,7 +23,7 @@ export function LandingPage() {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const res = await fetch("http://localhost:5000/api/products?sort=newest");
+        const res = await fetch(`${API_BASE_URL}/api/products?sort=newest`);
         const data = await res.json();
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products);

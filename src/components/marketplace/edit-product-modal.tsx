@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Tag, Percent, DollarSign, Sparkles, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { API_BASE_URL } from "@/lib/api";
 
 export const PRODUCT_CATEGORIES = [
   "Electronics & Gadgets",
@@ -165,7 +166,7 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/products/${product._id || product.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/products/${product._id || product.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

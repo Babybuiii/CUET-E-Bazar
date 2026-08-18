@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/api";
 
 type Participant = {
   _id: string;
@@ -102,7 +103,7 @@ function MessagesContent() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/messages/conversations", {
+      const res = await fetch(`${API_BASE_URL}/api/messages/conversations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -174,7 +175,7 @@ function MessagesContent() {
       // If redirected with a specific sellerId, start or find real conversation in DB
       if (sellerId) {
         try {
-          const res = await fetch("http://localhost:5000/api/messages/start", {
+          const res = await fetch(`${API_BASE_URL}/api/messages/start`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -207,7 +208,7 @@ function MessagesContent() {
     if (!token || !convId) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/messages/${convId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/messages/${convId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -262,7 +263,7 @@ function MessagesContent() {
 
     try {
       setSending(true);
-      const res = await fetch(`http://localhost:5000/api/messages/${activeChatId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/messages/${activeChatId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

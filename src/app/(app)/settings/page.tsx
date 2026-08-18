@@ -35,6 +35,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { API_BASE_URL } from "@/lib/api";
 
 const DEFAULT_DEPARTMENTS = [
   "Civil Engineering",
@@ -171,7 +172,7 @@ export default function SettingsPage() {
 
         // Fetch dynamic constants (departments, halls)
         try {
-          const constRes = await fetch("http://localhost:5000/api/auth/constants");
+          const constRes = await fetch(`${API_BASE_URL}/api/auth/constants`);
           if (constRes.ok) {
             const constData = await constRes.json();
             if (constData.departments && Array.isArray(constData.departments)) {
@@ -194,7 +195,7 @@ export default function SettingsPage() {
         setIsLoggedIn(true);
 
         // Fetch current user details from /api/auth/me
-        const meRes = await fetch("http://localhost:5000/api/auth/me", {
+        const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${storedToken}`
           }
@@ -263,7 +264,7 @@ export default function SettingsPage() {
 
     try {
       setSavingProfile(true);
-      const res = await fetch("http://localhost:5000/api/auth/profile", {
+      const res = await fetch(`${API_BASE_URL}/api/auth/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -316,7 +317,7 @@ export default function SettingsPage() {
       setUploadingAvatar(true);
       setProfileStatus(null);
 
-      const res = await fetch("http://localhost:5000/api/auth/avatar", {
+      const res = await fetch(`${API_BASE_URL}/api/auth/avatar`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`
@@ -370,7 +371,7 @@ export default function SettingsPage() {
 
     try {
       setSavingPassword(true);
-      const res = await fetch("http://localhost:5000/api/auth/password", {
+      const res = await fetch(`${API_BASE_URL}/api/auth/password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
