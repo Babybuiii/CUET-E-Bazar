@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ProductCard } from "@/components/marketplace/product-card";
@@ -9,11 +10,20 @@ import { SellModal } from "@/components/marketplace/sell-modal";
 import { Loader2, PlusCircle, ShoppingBag, Sparkles, Tag, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function HomePage() {
+  const router = useRouter();
+  const { isLoggedIn, loading: authLoading } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSellOpen, setIsSellOpen] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      router.replace("/");
+    }
+  }, [authLoading, isLoggedIn, router]);
 
   const fetchProducts = async () => {
     try {
@@ -123,28 +133,12 @@ export default function HomePage() {
             </Button>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {products.map((product) => (
               <ProductCard key={product._id || product.id} product={product} />
             ))}
           </div>
         )}
-      </section>
-
-      {/* ── Campus Categories ── */}
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card className="p-5 hover:border-brand-emerald transition">
-          <p className="font-semibold text-sm text-slate-900 dark:text-white">Drawing & Lab Kits</p>
-          <p className="mt-1 text-xs text-slate-500">T-squares, drafters, aprons & engineering sets from seniors.</p>
-        </Card>
-        <Card className="p-5 hover:border-brand-emerald transition">
-          <p className="font-semibold text-sm text-slate-900 dark:text-white">Scientific Calculators</p>
-          <p className="mt-1 text-xs text-slate-500">Casio 991EX, 991CW and graphic calculators at student rates.</p>
-        </Card>
-        <Card className="p-5 hover:border-brand-emerald transition">
-          <p className="font-semibold text-sm text-slate-900 dark:text-white">Giveaway Books & Notes</p>
-          <p className="mt-1 text-xs text-slate-500">Free textbooks and semester lecture sheets donated by peers.</p>
-        </Card>
       </section>
 
       {/* ── Sell Modal ── */}

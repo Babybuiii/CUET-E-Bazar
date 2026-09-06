@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
@@ -19,6 +19,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
+import { isWishlistedLocally, toggleWishlist } from "@/lib/wishlist";
 
 type ProductImage = {
   url: string;
@@ -79,6 +80,8 @@ function GalleryImage({
       alt={alt}
       fill
       priority={priority}
+      quality={95}
+      unoptimized={src.includes("cloudinary.com")}
       sizes="(max-width: 1024px) 100vw, 60vw"
       className={className}
     />
@@ -94,6 +97,30 @@ export default function ProductDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  const lastRecordedViewIdRef = useRef<string | null>(null);
+
+  // Track ad click / view exactly once per visit (immune to React StrictMode double invocation)
+  useEffect(() => {
+    if (!id || lastRecordedViewIdRef.current === id) return;
+    lastRecordedViewIdRef.current = id;
+    fetch(`${API_BASE_URL}/api/products/${id}/view`, { method: "POST" }).catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setIsSaved(isWishlistedLocally(id));
+    const handleUpdate = () => {
+      setIsSaved(isWishlistedLocally(id));
+    };
+    window.addEventListener("wishlist-updated", handleUpdate);
+    return () => window.removeEventListener("wishlist-updated", handleUpdate);
+  }, [id]);
+
+  const handleToggleSave = async () => {
+    if (!id) return;
+    const newState = await toggleWishlist(id);
+    setIsSaved(newState);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -236,6 +263,8 @@ export default function ProductDetailsPage() {
                         src={img.thumbnailUrl || img.url}
                         alt={`Thumbnail ${idx + 1}`}
                         fill
+                        quality={90}
+                        unoptimized={(img.thumbnailUrl || img.url).includes("cloudinary.com")}
                         loading="lazy"
                         className="object-cover"
                       />
@@ -327,13 +356,13 @@ export default function ProductDetailsPage() {
                 )}
               </div>
               <button
-                onClick={() => setIsSaved(!isSaved)}
+                onClick={handleToggleSave}
                 className={`focus-ring rounded-full p-2.5 transition border ${
                   isSaved
                     ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40"
                     : "border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-slate-500"
                 }`}
-                title="Save to wishlist"
+                title={isSaved ? "Remove from wishlist" : "Save to wishlist"}
               >
                 <Heart size={18} fill={isSaved ? "currentColor" : "none"} />
               </button>

@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const User = require('../models/User');
 const { upload, cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
 const { authenticate } = require('../middleware/auth');
 
-// Helper to generate a 400x400 fast thumbnail URL from Cloudinary URL
+// Helper to generate a fast, uncropped optimized thumbnail URL from Cloudinary URL
 function makeThumbnailUrl(url) {
   if (!url || typeof url !== 'string') return '';
   if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
-    return url.replace('/upload/', '/upload/c_fill,w_400,h_400,q_auto,f_auto/');
+    return url.replace('/upload/', '/upload/c_limit,w_1200,q_auto:best,f_auto/');
   }
   return url;
 }
@@ -30,8 +31,14 @@ router.get('/', async (req, res) => {
     if (location) {
       filter.location = location;
     }
-    if (search) {
-      filter.$text = { $search: search };
+    if (search && search.trim()) {
+      const q = search.trim();
+      filter.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { description: { $regex: q, $options: 'i' } },
+        { tags: { $in: [new RegExp(q, 'i')] } },
+        { category: { $regex: q, $options: 'i' } }
+      ];
     }
 
     let sortOption = { createdAt: -1 };
@@ -78,7 +85,225 @@ router.get('/user/my-listings', authenticate, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GET /api/products/:id - Get single product
+// GET /api/products/user/wishlist - Get authenticated user's wishlisted products
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/user/wishlist', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate({
+      path: 'wishlist',
+      populate: [
+        { path: 'seller', select: 'fullName userId rating avatarUrl department hall isVerified' },
+        { path: 'shop', select: 'shopName slug isVerified rating' }
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Filter out any deleted products
+    const validProducts = (user.wishlist || []).filter((p) => p !== null && p !== undefined);
+
+    return res.json({
+      success: true,
+      count: validProducts.length,
+      products: validProducts
+    });
+  } catch (err) {
+    console.error('Fetch wishlist error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch wishlist.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/products/user/wishlist-ids - Get wishlisted IDs array for fast checks
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/user/wishlist-ids', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('wishlist');
+    if (!user) {
+      return res.json({ success: true, wishlistIds: [] });
+    }
+    const ids = (user.wishlist || []).map((id) => id.toString());
+    return res.json({ success: true, wishlistIds: ids });
+  } catch (err) {
+    return res.json({ success: true, wishlistIds: [] });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /api/products/:id/wishlist - Toggle product in user's wishlist
+// ═══════════════════════════════════════════════════════════════════════════════
+router.post('/:id/wishlist', authenticate, async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (!Array.isArray(user.wishlist)) {
+      user.wishlist = [];
+    }
+
+    const existsIndex = user.wishlist.findIndex(
+      (id) => id.toString() === productId.toString()
+    );
+
+    let isWishlisted = false;
+    if (existsIndex > -1) {
+      user.wishlist.splice(existsIndex, 1);
+      isWishlisted = false;
+    } else {
+      user.wishlist.unshift(productId);
+      isWishlisted = true;
+    }
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      isWishlisted,
+      wishlistCount: user.wishlist.length,
+      message: isWishlisted ? 'Product saved to wishlist' : 'Product removed from wishlist'
+    });
+  } catch (err) {
+    console.error('Toggle wishlist error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update wishlist.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/products/user/dashboard-analytics - Seller performance analytics
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/user/dashboard-analytics', authenticate, async (req, res) => {
+  try {
+    const products = await Product.find({ seller: req.user._id })
+      .populate('seller', 'fullName userId rating avatarUrl department hall isVerified')
+      .populate('shop', 'shopName slug isVerified rating')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const productIds = products.map((p) => p._id);
+
+    // Count how many users have wishlisted each product of this seller
+    const wishlistAggregation = await User.aggregate([
+      { $unwind: '$wishlist' },
+      { $match: { wishlist: { $in: productIds } } },
+      { $group: { _id: '$wishlist', count: { $sum: 1 } } }
+    ]);
+
+    const wishlistMap = {};
+    wishlistAggregation.forEach((w) => {
+      wishlistMap[w._id.toString()] = w.count;
+    });
+
+    let totalViews = 0;
+    let totalWishlists = 0;
+    let totalRevenue = 0;
+    let potentialRevenue = 0;
+    let activeCount = 0;
+    let soldCount = 0;
+    let reservedCount = 0;
+
+    const productsWithStats = products.map((p) => {
+      const views = p.viewsCount || p.views || 0;
+      const wishlists = wishlistMap[p._id.toString()] || 0;
+      totalViews += views;
+      totalWishlists += wishlists;
+
+      const price = Number(p.price) || 0;
+
+      if (p.status === 'sold') {
+        soldCount += 1;
+        totalRevenue += price;
+      } else if (p.status === 'active') {
+        activeCount += 1;
+        potentialRevenue += price;
+      } else if (p.status === 'reserved') {
+        reservedCount += 1;
+      }
+
+      return {
+        ...p,
+        viewsCount: views,
+        wishlistCount: wishlists
+      };
+    });
+
+    const conversionRate =
+      products.length > 0
+        ? Math.round((soldCount / products.length) * 100)
+        : 0;
+
+    const clickToSaveRate =
+      totalViews > 0
+        ? ((totalWishlists / totalViews) * 100).toFixed(1)
+        : '0.0';
+
+    return res.json({
+      success: true,
+      analytics: {
+        totalListings: products.length,
+        activeListings: activeCount,
+        soldItems: soldCount,
+        reservedItems: reservedCount,
+        totalRevenue,
+        potentialRevenue,
+        totalAdClicks: totalViews,
+        totalWishlists,
+        conversionRate,
+        clickToSaveRate
+      },
+      products: productsWithStats
+    });
+  } catch (err) {
+    console.error('Fetch dashboard analytics error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate seller analytics.'
+    });
+  }
+});
+
+// Route alias for convenience
+router.get('/dashboard-analytics', authenticate, (req, res, next) => {
+  req.url = '/user/dashboard-analytics';
+  router.handle(req, res, next);
+});
+
+// Route alias for my-listings
+router.get('/my-listings', authenticate, (req, res, next) => {
+  req.url = '/user/my-listings';
+  router.handle(req, res, next);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /api/products/:id/view - Record single ad click / view
+// ═══════════════════════════════════════════════════════════════════════════════
+router.post('/:id/view', async (req, res) => {
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { viewsCount: 1 } },
+      { new: true }
+    );
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+    return res.json({ success: true, viewsCount: product.viewsCount });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to record click.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/products/:id - Get single product (idempotent read)
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/:id', async (req, res) => {
   try {
@@ -89,10 +314,6 @@ router.get('/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found.' });
     }
-
-    // Increment views
-    product.views = (product.views || 0) + 1;
-    await product.save();
 
     return res.json({ success: true, product });
   } catch (err) {
@@ -166,6 +387,17 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
       });
     }
 
+    const coverIdx = Number(req.body.coverIndex) || 0;
+    if (coverIdx > 0 && coverIdx < images.length) {
+      const coverItem = images.splice(coverIdx, 1)[0];
+      images.unshift(coverItem);
+    }
+    if (images.length > 0) {
+      images.forEach((img, i) => {
+        img.isCover = i === 0;
+      });
+    }
+
     // ── 4. Create Product in MongoDB ──
     const product = await Product.create({
       title: title.trim(),
@@ -204,9 +436,9 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PUT /api/products/:id - Edit listing (title, price, discount, tags, etc.)
+// PUT /api/products/:id - Edit listing (title, price, photos, cover photo, etc.)
 // ═══════════════════════════════════════════════════════════════════════════════
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, upload.array('newImages', 8), async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
@@ -230,7 +462,9 @@ router.put('/:id', authenticate, async (req, res) => {
       location,
       status,
       tags,
-      isNegotiable
+      isNegotiable,
+      coverIndex,
+      existingImages
     } = req.body;
 
     if (title !== undefined) product.title = title.trim();
@@ -244,11 +478,86 @@ router.put('/:id', authenticate, async (req, res) => {
     if (status !== undefined && ['active', 'sold', 'reserved', 'removed_by_admin'].includes(status)) {
       product.status = status;
     }
-    if (tags !== undefined && Array.isArray(tags)) {
-      product.tags = tags.filter(Boolean).map((t) => t.trim());
+    if (tags !== undefined) {
+      let parsedTags = tags;
+      if (typeof tags === 'string') {
+        try {
+          parsedTags = JSON.parse(tags);
+        } catch {
+          parsedTags = tags.split(',').map((t) => t.trim());
+        }
+      }
+      if (Array.isArray(parsedTags)) {
+        product.tags = parsedTags.filter(Boolean).map((t) => String(t).trim());
+      }
     }
     if (isNegotiable !== undefined) {
       product.isNegotiable = isNegotiable === true || isNegotiable === 'true';
+    }
+
+    // ── Photo Updates (Add new photos, remove photos, reorder cover photo) ──
+    let updatedImages = null;
+    if (existingImages !== undefined) {
+      try {
+        updatedImages = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages;
+      } catch (e) {
+        updatedImages = [...product.images];
+      }
+    } else {
+      updatedImages = [...product.images];
+    }
+
+    // Upload new files if provided
+    if (req.files && req.files.length > 0) {
+      let newlyUploaded = [];
+      if (isCloudinaryConfigured) {
+        newlyUploaded = req.files.map((file) => {
+          const fullUrl = file.path || file.secure_url || file.url || '';
+          return {
+            url: fullUrl,
+            thumbnailUrl: makeThumbnailUrl(fullUrl),
+            publicId: file.filename || file.public_id || `ebazar-${Date.now()}`
+          };
+        });
+      } else {
+        newlyUploaded = req.files.map((file, idx) => {
+          const base64Data = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+          return {
+            url: base64Data,
+            thumbnailUrl: base64Data,
+            publicId: `local-buffer-${Date.now()}-${idx}`
+          };
+        });
+      }
+      updatedImages = [...updatedImages, ...newlyUploaded];
+    }
+
+    if (existingImages !== undefined || (req.files && req.files.length > 0) || coverIndex !== undefined) {
+      if (updatedImages.length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'A product listing must have at least 3 photos. Please keep 3 or more photos.'
+        });
+      }
+      if (updatedImages.length > 8) {
+        return res.status(400).json({
+          success: false,
+          message: 'A product listing can have at most 8 photos.'
+        });
+      }
+
+      // Reorder cover photo to index 0
+      const cIdx = Number(coverIndex) || 0;
+      if (cIdx > 0 && cIdx < updatedImages.length) {
+        const [chosenCover] = updatedImages.splice(cIdx, 1);
+        updatedImages.unshift(chosenCover);
+      }
+
+      updatedImages.forEach((img, i) => {
+        img.isCover = i === 0;
+      });
+
+      product.images = updatedImages;
     }
 
     await product.save();
@@ -264,7 +573,64 @@ router.put('/:id', authenticate, async (req, res) => {
     });
   } catch (err) {
     console.error('Update product error:', err);
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map((e) => e.message);
+      return res.status(400).json({ success: false, message: messages.join(' | ') });
+    }
     return res.status(500).json({ success: false, message: 'Server error while updating listing.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PATCH /api/products/:id/cover - Quick cover photo selection
+// ═══════════════════════════════════════════════════════════════════════════════
+router.patch('/:id/cover', authenticate, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const isOwner = product.seller.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'You are not authorized to edit this listing.' });
+    }
+
+    const { coverIndex, publicId, url } = req.body;
+    let targetIdx = -1;
+
+    if (coverIndex !== undefined && Number(coverIndex) >= 0 && Number(coverIndex) < product.images.length) {
+      targetIdx = Number(coverIndex);
+    } else if (publicId) {
+      targetIdx = product.images.findIndex((img) => img.publicId === publicId);
+    } else if (url) {
+      targetIdx = product.images.findIndex((img) => img.url === url || img.thumbnailUrl === url);
+    }
+
+    if (targetIdx > 0 && targetIdx < product.images.length) {
+      const [chosenCover] = product.images.splice(targetIdx, 1);
+      product.images.unshift(chosenCover);
+    }
+
+    product.images.forEach((img, i) => {
+      img.isCover = i === 0;
+    });
+
+    await product.save();
+
+    const populatedProduct = await Product.findById(product._id)
+      .populate('seller', 'fullName userId rating avatarUrl department hall isVerified')
+      .populate('shop', 'shopName slug isVerified rating');
+
+    return res.json({
+      success: true,
+      message: 'Cover photo updated successfully!',
+      product: populatedProduct
+    });
+  } catch (err) {
+    console.error('Update cover error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update cover photo.' });
   }
 });
 
@@ -290,17 +656,21 @@ router.patch('/:id/status', authenticate, async (req, res) => {
     }
 
     product.status = status;
-    if (status === 'sold') {
-      req.user.totalProductsSold = (req.user.totalProductsSold || 0) + 1;
-      await req.user.save();
-    }
-
     await product.save();
+
+    // Recalculate seller's accurate totalProductsSold from current database listings
+    const actualSold = await Product.countDocuments({ seller: product.seller, status: 'sold' });
+    const sellerUser = await User.findById(product.seller);
+    if (sellerUser) {
+      sellerUser.totalProductsSold = actualSold;
+      await sellerUser.save();
+    }
 
     return res.json({
       success: true,
       message: `Listing marked as ${status}!`,
-      product
+      product,
+      totalProductsSold: actualSold
     });
   } catch (err) {
     console.error('Update product status error:', err);
@@ -339,7 +709,16 @@ router.delete('/:id', authenticate, async (req, res) => {
     }
 
     await product.deleteOne();
-    return res.json({ success: true, message: 'Product and associated images deleted successfully.' });
+
+    // Recalculate seller's totalProductsSold
+    const actualSold = await Product.countDocuments({ seller: product.seller, status: 'sold' });
+    await User.findByIdAndUpdate(product.seller, { totalProductsSold: actualSold });
+
+    return res.json({
+      success: true,
+      message: 'Product and associated images deleted successfully.',
+      totalProductsSold: actualSold
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to delete product.' });
   }

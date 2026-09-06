@@ -233,9 +233,129 @@ router.post('/login', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// POST /api/auth/firebase-sync - Login or Register user verified via Firebase Auth
+// ═══════════════════════════════════════════════════════════════════════════════
+router.post('/firebase-sync', async (req, res) => {
+  try {
+    const {
+      firebaseUid,
+      email,
+      fullName,
+      role = 'student',
+      contactNumber,
+      studentId,
+      department,
+      hall,
+      shopName,
+      shopCategory,
+      shopDescription,
+      shopLocation,
+      operatingHours
+    } = req.body;
+
+    if (!firebaseUid || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Firebase UID and email are required.'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    let user = await User.findOne({
+      $or: [{ firebaseUid }, { email: normalizedEmail }]
+    }).populate('shop');
+
+    let createdShop = null;
+
+    if (user) {
+      // Existing user: link firebaseUid if not already linked
+      if (!user.firebaseUid) {
+        user.firebaseUid = firebaseUid;
+      }
+      if (user.isBanned) {
+        return res.status(403).json({
+          success: false,
+          message: `Your account has been banned. Reason: ${user.banReason || 'Contact admin for details.'}`
+        });
+      }
+      user.lastActive = new Date();
+      await user.save();
+    } else {
+      // New user registration through Firebase
+      if (!fullName || !contactNumber) {
+        return res.status(400).json({
+          success: false,
+          needsProfileSetup: true,
+          message: 'Profile details (name, contact number) are required to complete registration.'
+        });
+      }
+
+      const userRole = role === 'shop_owner' ? 'shop_owner' : 'student';
+
+      user = await User.create({
+        firebaseUid,
+        email: normalizedEmail,
+        fullName: fullName.trim(),
+        role: userRole,
+        contactNumber: contactNumber.trim(),
+        studentId: userRole === 'student' ? (studentId ? studentId.trim() : undefined) : undefined,
+        department: userRole === 'student' ? department : '',
+        hall: userRole === 'student' ? hall : ''
+      });
+
+      if (userRole === 'shop_owner' && shopName) {
+        createdShop = await Shop.create({
+          shopName: shopName.trim(),
+          owner: user._id,
+          category: shopCategory || 'General Store',
+          description: shopDescription || '',
+          location: shopLocation || 'CUET Campus',
+          contactNumber: contactNumber.trim(),
+          email: normalizedEmail,
+          operatingHours: operatingHours || { open: '09:00', close: '21:00' }
+        });
+        user.shop = createdShop._id;
+        await user.save();
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Authenticated successfully with Firebase!',
+      token,
+      user: formatUser(user, createdShop || user.shop)
+    });
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map((e) => e.message);
+      return res.status(400).json({ success: false, message: messages.join(' | ') });
+    }
+    console.error('Firebase sync error:', err);
+    return res.status(500).json({ success: false, message: 'Server error during Firebase authentication.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // GET /api/auth/me
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/me', authenticate, async (req, res) => {
+  try {
+    const Product = require('../models/Product');
+    const actualSold = await Product.countDocuments({ seller: req.user._id, status: 'sold' });
+    if (req.user.totalProductsSold !== actualSold) {
+      req.user.totalProductsSold = actualSold;
+      await req.user.save();
+    }
+  } catch (err) {
+    console.error('Failed to sync totalProductsSold in /me:', err);
+  }
+
   return res.json({
     success: true,
     user: formatUser(req.user)

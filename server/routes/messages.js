@@ -34,13 +34,22 @@ router.get('/conversations', authenticate, async (req, res) => {
 router.post('/start', authenticate, async (req, res) => {
   try {
     const { recipientId, productId, initialText } = req.body;
+    const mongoose = require('mongoose');
 
     if (!recipientId) {
       return res.status(400).json({ success: false, message: 'Recipient ID is required.' });
     }
 
     if (recipientId.toString() === req.user._id.toString()) {
-      return res.status(400).json({ success: false, message: 'You cannot chat with yourself.' });
+      return res.status(400).json({
+        success: false,
+        isSelf: true,
+        message: 'This is your own product listing.'
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(recipientId)) {
+      return res.status(400).json({ success: false, message: 'Invalid recipient ID provided.' });
     }
 
     const recipient = await User.findById(recipientId);
@@ -48,25 +57,34 @@ router.post('/start', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Recipient user not found.' });
     }
 
-    // Try finding existing conversation between these 2 users (optionally matching product)
-    let query = {
-      participants: { $all: [req.user._id, recipientId] }
-    };
-    if (productId) {
-      query.product = productId;
+    const validProductId = productId && mongoose.Types.ObjectId.isValid(productId) ? productId : null;
+
+    // Try finding existing conversation between these 2 users (prioritizing product match if present)
+    let conversation = null;
+    if (validProductId) {
+      conversation = await Conversation.findOne({
+        participants: { $all: [req.user._id, recipientId] },
+        product: validProductId
+      })
+        .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
+        .populate('product', 'title price images status condition location');
     }
 
-    let conversation = await Conversation.findOne(query)
-      .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
-      .populate('product', 'title price images status condition location');
+    if (!conversation) {
+      conversation = await Conversation.findOne({
+        participants: { $all: [req.user._id, recipientId] }
+      })
+        .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
+        .populate('product', 'title price images status condition location');
+    }
 
-    // If not found, create new conversation
+    // If still not found, create new conversation
     if (!conversation) {
       conversation = await Conversation.create({
         participants: [req.user._id, recipientId],
-        product: productId || null,
+        product: validProductId,
         lastMessage: {
-          text: initialText || 'Started conversation',
+          text: initialText || 'No messages yet',
           sender: req.user._id,
           sentAt: new Date()
         }
@@ -83,6 +101,19 @@ router.post('/start', authenticate, async (req, res) => {
       conversation = await Conversation.findById(conversation._id)
         .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
         .populate('product', 'title price images status condition location');
+    } else if (initialText) {
+      // If conversation already existed and initialText was sent, record the new message
+      await Message.create({
+        conversation: conversation._id,
+        sender: req.user._id,
+        text: initialText
+      });
+      conversation.lastMessage = {
+        text: initialText,
+        sender: req.user._id,
+        sentAt: new Date()
+      };
+      await conversation.save();
     }
 
     return res.json({

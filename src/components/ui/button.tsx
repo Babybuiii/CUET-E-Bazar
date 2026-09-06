@@ -7,7 +7,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "primary", ...props }: ButtonProps) {
   const base =
-    "focus-ring inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold transition duration-150 active:scale-[0.99]";
+    "focus-ring inline-flex items-center justify-center rounded-md px-3.5 py-2 text-xs sm:px-5 sm:py-2.5 sm:text-sm font-semibold transition duration-150 active:scale-[0.99]";
 
   const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
     primary:

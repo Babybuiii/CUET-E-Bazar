@@ -3,13 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import {
   User,
   ShieldCheck,
   Key,
   Bell,
-  Palette,
   Camera,
   Save,
   CheckCircle2,
@@ -23,18 +21,13 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  Sparkles,
   BadgeCheck,
-  MapPin,
-  RefreshCw,
-  Sliders,
   Check,
   AlertTriangle
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { API_BASE_URL } from "@/lib/api";
 
 const DEFAULT_DEPARTMENTS = [
@@ -64,17 +57,6 @@ const DEFAULT_HALLS = [
   "Tapashi Rabeya Hall"
 ];
 
-const CAMPUS_MEETUP_SPOTS = [
-  "CUET Central Library",
-  "CUET Central Cafeteria",
-  "Gol Chattar (Roundabout)",
-  "Shaheed Minar",
-  "Department Building Front",
-  "Main Gate Entrance",
-  "Hall Common Room",
-  "TSC / Auditorium"
-];
-
 type UserProfile = {
   _id: string;
   userId?: string;
@@ -95,7 +77,7 @@ type UserProfile = {
   createdAt?: string;
 };
 
-type TabType = "profile" | "security" | "notifications" | "preferences";
+type TabType = "profile" | "security" | "notifications";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -134,9 +116,6 @@ export default function SettingsPage() {
     emailDigests: false
   });
 
-  // Campus Preference State
-  const [preferredMeetup, setPreferredMeetup] = useState(CAMPUS_MEETUP_SPOTS[0]);
-
   // Status & Feedback States
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -162,11 +141,6 @@ export default function SettingsPage() {
             } catch {
               // ignore JSON error
             }
-          }
-
-          const cachedMeetup = localStorage.getItem("cuet_ebazar_preferred_meetup");
-          if (cachedMeetup) {
-            setPreferredMeetup(cachedMeetup);
           }
         }
 
@@ -240,6 +214,19 @@ export default function SettingsPage() {
     };
 
     initData();
+
+    const handleAuthChange = () => {
+      const cached = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_user") : null;
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setUser((prev) => (prev ? { ...prev, ...parsed } : parsed));
+        } catch {}
+      }
+    };
+
+    window.addEventListener("auth-changed", handleAuthChange);
+    return () => window.removeEventListener("auth-changed", handleAuthChange);
   }, []);
 
   // Handle Profile Update
@@ -410,18 +397,6 @@ export default function SettingsPage() {
     }
   };
 
-  // Handle Meetup Spot Save
-  const handleSaveMeetupSpot = (spot: string) => {
-    setPreferredMeetup(spot);
-    try {
-      localStorage.setItem("cuet_ebazar_preferred_meetup", spot);
-      setPrefStatus("Preferred campus meetup spot saved!");
-      setTimeout(() => setPrefStatus(null), 3000);
-    } catch {
-      // ignore
-    }
-  };
-
   // Handle Logout
   const handleLogout = () => {
     try {
@@ -431,18 +406,6 @@ export default function SettingsPage() {
       // ignore
     }
     router.push("/login");
-  };
-
-  // Handle Clear Local Cache
-  const handleClearCache = () => {
-    try {
-      localStorage.removeItem("cuet_ebazar_notif_prefs");
-      localStorage.removeItem("cuet_ebazar_preferred_meetup");
-      setPrefStatus("Local application cache cleared.");
-      setTimeout(() => setPrefStatus(null), 3000);
-    } catch {
-      // ignore
-    }
   };
 
   if (loading) {
@@ -459,7 +422,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <PageHeader
           title="Account Settings"
-          description="Manage your profile, security, notifications and preferences."
+          description="Manage your profile, security credentials, and notification alerts."
         />
         <Card className="flex flex-col items-center justify-center py-16 text-center border-dashed border-2 bg-white dark:bg-slate-900">
           <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400">
@@ -542,17 +505,6 @@ export default function SettingsPage() {
         >
           <Bell size={16} /> Notification Alerts
         </button>
-
-        <button
-          onClick={() => setActiveTab("preferences")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "preferences"
-              ? "bg-brand-emerald text-white shadow-sm"
-              : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 border border-slate-200 dark:border-slate-700"
-          }`}
-        >
-          <Palette size={16} /> Appearance & Meetup
-        </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════════
@@ -628,7 +580,9 @@ export default function SettingsPage() {
                   <p className="text-slate-500 text-[10px] uppercase">Sold</p>
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-slate-900 dark:text-white">{user?.rating || "5.0"} ★</p>
+                  <p className="font-bold text-sm text-slate-900 dark:text-white">
+                    {user?.rating && Number(user.rating) > 0 ? `${Number(user.rating).toFixed(1)} ★` : "N/A"}
+                  </p>
                   <p className="text-slate-500 text-[10px] uppercase">Rating</p>
                 </div>
                 <div>
@@ -1101,80 +1055,6 @@ export default function SettingsPage() {
             </Button>
           </div>
         </Card>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════════
-          TAB 4: APPEARANCE & PREFERENCES
-         ══════════════════════════════════════════════════════════════════════════ */}
-      {activeTab === "preferences" && (
-        <div className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Theme Card */}
-            <Card className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <Palette size={16} className="text-brand-emerald" /> Dark Mode & Theme
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Toggle between high-contrast dark mode and clean daylight theme.
-                </p>
-              </div>
-              <ThemeToggle />
-            </Card>
-
-            {/* Meetup Spot Preference */}
-            <Card className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <MapPin size={16} className="text-brand-emerald" /> Preferred Meetup Spot
-                </p>
-                <span className="text-[11px] text-brand-emerald font-semibold">Auto-suggested</span>
-              </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Your preferred default exchange point for product handovers with buyers.
-              </p>
-              <select
-                value={preferredMeetup}
-                onChange={(e) => handleSaveMeetupSpot(e.target.value)}
-                className="mt-3 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald"
-              >
-                {CAMPUS_MEETUP_SPOTS.map((spot) => (
-                  <option key={spot} value={spot}>
-                    {spot}
-                  </option>
-                ))}
-              </select>
-            </Card>
-          </div>
-
-          {/* Account Danger Zone */}
-          <Card className="p-6 border-rose-500/30 bg-rose-500/5">
-            <h4 className="font-display text-base font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
-              <AlertTriangle size={18} /> Account Maintenance & Data
-            </h4>
-            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              Manage cached browser data, active session tokens, or reset stored preferences.
-            </p>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                onClick={handleClearCache}
-                variant="secondary"
-                className="text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <RefreshCw size={14} className="mr-1.5" /> Reset Local Preferences
-              </Button>
-
-              <Button
-                onClick={handleLogout}
-                variant="secondary"
-                className="text-xs text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50"
-              >
-                <LogOut size={14} className="mr-1.5" /> Sign Out of All Devices
-              </Button>
-            </div>
-          </Card>
-        </div>
       )}
     </div>
   );

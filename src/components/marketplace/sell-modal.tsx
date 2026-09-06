@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PlusCircle, X, Upload, CheckCircle2, AlertCircle, Image as ImageIcon, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { PlusCircle, X, Upload, CheckCircle2, AlertCircle, Image as ImageIcon, Loader2, Sparkles, Trash2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { API_BASE_URL } from "@/lib/api";
@@ -63,6 +63,7 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
   // Photo state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -93,6 +94,13 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
     URL.revokeObjectURL(previewUrls[indexToRemove]);
     const updatedPreviews = previewUrls.filter((_, idx) => idx !== indexToRemove);
     setPreviewUrls(updatedPreviews);
+
+    // Update cover index
+    if (coverIndex === indexToRemove) {
+      setCoverIndex(0);
+    } else if (coverIndex > indexToRemove) {
+      setCoverIndex((prev) => prev - 1);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -123,8 +131,17 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
       data.append("description", formData.description.trim());
       data.append("isNegotiable", String(formData.isNegotiable));
 
+      // Reorder so chosen cover photo is uploaded first (index 0)
+      const filesToUpload = [...selectedFiles];
+      if (coverIndex > 0 && coverIndex < filesToUpload.length) {
+        const [coverFile] = filesToUpload.splice(coverIndex, 1);
+        filesToUpload.unshift(coverFile);
+      }
+
+      data.append("coverIndex", "0");
+
       // Append all selected image files under "images"
-      selectedFiles.forEach((file) => {
+      filesToUpload.forEach((file) => {
         data.append("images", file);
       });
 
@@ -165,19 +182,20 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
         });
         setSelectedFiles([]);
         setPreviewUrls([]);
-      }, 1500);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Error connecting to listing server.";
-      setError(message);
+        setCoverIndex(0);
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || "Something went wrong creating listing.");
     } finally {
       setLoading(false);
     }
   };
 
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -189,9 +207,9 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="relative z-10 w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+            className="relative z-10 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 sm:pb-4 dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-emerald/10 text-brand-emerald">
                   <PlusCircle size={20} />
@@ -246,25 +264,75 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
                     </span>
                   </div>
 
-                  {/* Previews Grid */}
+                  {/* Previews Grid with Cover Photo Selection */}
                   {previewUrls.length > 0 && (
-                    <div className="mt-3 grid grid-cols-4 gap-2">
-                      {previewUrls.map((url, idx) => (
-                        <div key={idx} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700">
-                          <img src={url} alt={`Preview ${idx + 1}`} className="h-full w-full object-cover" />
-                          <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
-                            {idx === 0 ? "Cover" : `#${idx + 1}`}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoto(idx)}
-                            className="absolute right-1 top-1 rounded-full bg-rose-600 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-700"
-                            title="Remove photo"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="mt-3 space-y-2">
+                      <div className="grid grid-cols-4 gap-2">
+                        {previewUrls.map((url, idx) => {
+                          const isCover = idx === coverIndex;
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => setCoverIndex(idx)}
+                              className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition cursor-pointer ${
+                                isCover
+                                  ? "border-brand-emerald ring-2 ring-brand-emerald/40 shadow-sm"
+                                  : "border-slate-200 hover:border-brand-emerald/50 bg-white dark:border-slate-700"
+                              }`}
+                              title={isCover ? "Current Cover Photo" : "Click to set as Cover Photo"}
+                            >
+                              <img src={url} alt={`Preview ${idx + 1}`} className="h-full w-full object-cover" />
+
+                              {/* Badge */}
+                              {isCover ? (
+                                <span className="absolute top-1 left-1 flex items-center gap-1 rounded bg-brand-emerald px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+                                  <Star size={10} className="fill-amber-300 text-amber-300" />
+                                  Cover
+                                </span>
+                              ) : (
+                                <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
+                                  #{idx + 1}
+                                </span>
+                              )}
+
+                              {/* Action to set as cover on hover if not cover */}
+                              {!isCover && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCoverIndex(idx);
+                                  }}
+                                  className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100 hover:bg-brand-emerald"
+                                >
+                                  <Star size={9} />
+                                  Set Cover
+                                </button>
+                              )}
+
+                              {/* Delete button */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemovePhoto(idx);
+                                }}
+                                className="absolute right-1 top-1 rounded-full bg-rose-600/90 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-700"
+                                title="Remove photo"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        <Star size={12} className="text-amber-500 shrink-0 fill-amber-500" />
+                        <span>
+                          <strong>Cover Photo:</strong> Click any photo or &quot;Set Cover&quot; to choose which image is shown on marketplace cards.
+                        </span>
+                      </p>
                     </div>
                   )}
 

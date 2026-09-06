@@ -11,12 +11,11 @@ import {
   PlusCircle,
   ShoppingBag,
   ExternalLink,
-  MessageSquare,
   Sparkles,
   ArrowRight,
   LogIn,
   RefreshCw,
-  Clock
+  Heart
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
@@ -24,16 +23,33 @@ import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { API_BASE_URL } from "@/lib/api";
 
-type ProductListing = {
+type ProductAnalytics = {
   _id: string;
+  id?: string;
   title: string;
   price: number;
+  originalPrice?: number | null;
+  discount?: number;
   category: string;
   condition: string;
   status: "active" | "sold" | "reserved" | "removed_by_admin";
   images: Array<{ url?: string; thumbnailUrl?: string } | string>;
-  viewsCount?: number;
+  viewsCount: number;
+  wishlistCount: number;
   createdAt: string;
+};
+
+type DashboardAnalytics = {
+  totalListings: number;
+  activeListings: number;
+  soldItems: number;
+  reservedItems: number;
+  totalRevenue: number;
+  potentialRevenue: number;
+  totalAdClicks: number;
+  totalWishlists: number;
+  conversionRate: number;
+  clickToSaveRate: string;
 };
 
 type UserProfile = {
@@ -44,15 +60,27 @@ type UserProfile = {
   department?: string;
   hall?: string;
   rating?: number;
-  totalProductsSold?: number;
 };
 
 export default function SellerDashboardPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [listings, setListings] = useState<ProductListing[]>([]);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics>({
+    totalListings: 0,
+    activeListings: 0,
+    soldItems: 0,
+    reservedItems: 0,
+    totalRevenue: 0,
+    potentialRevenue: 0,
+    totalAdClicks: 0,
+    totalWishlists: 0,
+    conversionRate: 0,
+    clickToSaveRate: "0.0"
+  });
+  const [products, setProducts] = useState<ProductAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSellOpen, setIsSellOpen] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -75,8 +103,8 @@ export default function SellerDashboardPage() {
         }
       }
 
-      // Fetch user's real listings
-      const res = await fetch(`${API_BASE_URL}/api/products/my-listings`, {
+      // Fetch comprehensive seller analytics
+      const res = await fetch(`${API_BASE_URL}/api/products/user/dashboard-analytics`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -84,13 +112,50 @@ export default function SellerDashboardPage() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.products)) {
-          setListings(data.products);
+        if (data.success) {
+          if (data.analytics) setAnalytics(data.analytics);
+          if (Array.isArray(data.products)) setProducts(data.products);
+          return;
         }
       }
-    } catch {
-      // Backend offline or fetch error — keep empty array
-      setListings([]);
+
+      // Fallback: fetch listings and compute basic metrics
+      const fallbackRes = await fetch(`${API_BASE_URL}/api/products/user/my-listings`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json();
+        if (fallbackData.success && Array.isArray(fallbackData.products)) {
+          const list = fallbackData.products;
+          const sold = list.filter((p: any) => p.status === "sold").length;
+          const active = list.filter((p: any) => p.status === "active").length;
+          const revenue = list
+            .filter((p: any) => p.status === "sold")
+            .reduce((s: number, p: any) => s + (Number(p.price) || 0), 0);
+          const potential = list
+            .filter((p: any) => p.status === "active")
+            .reduce((s: number, p: any) => s + (Number(p.price) || 0), 0);
+          const clicks = list.reduce((s: number, p: any) => s + (p.viewsCount || p.views || 0), 0);
+
+          setAnalytics({
+            totalListings: list.length,
+            activeListings: active,
+            soldItems: sold,
+            reservedItems: list.filter((p: any) => p.status === "reserved").length,
+            totalRevenue: revenue,
+            potentialRevenue: potential,
+            totalAdClicks: clicks,
+            totalWishlists: 0,
+            conversionRate: list.length > 0 ? Math.round((sold / list.length) * 100) : 0,
+            clickToSaveRate: "0.0"
+          });
+          setProducts(list);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load seller dashboard:", err);
     } finally {
       setLoading(false);
     }
@@ -100,18 +165,42 @@ export default function SellerDashboardPage() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Calculate real metrics
-  const totalProducts = listings.length;
-  const activeProducts = listings.filter((p) => p.status === "active").length;
-  const soldProducts = listings.filter((p) => p.status === "sold").length;
-  const totalRevenue = listings
-    .filter((p) => p.status === "sold")
-    .reduce((sum, p) => sum + (Number(p.price) || 0), 0);
-  const totalViews = listings.reduce((sum, p) => sum + (p.viewsCount || 0), 0);
+  const handleToggleStatus = async (productId: string, newStatus: "active" | "sold" | "reserved") => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
+    if (!token) return;
 
-  const recentListings = [...listings]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+    try {
+      setStatusUpdatingId(productId);
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (typeof data.totalProductsSold === "number") {
+          const cached = localStorage.getItem("cuet_ebazar_user");
+          if (cached) {
+            try {
+              const u = JSON.parse(cached);
+              u.totalProductsSold = data.totalProductsSold;
+              localStorage.setItem("cuet_ebazar_user", JSON.stringify(u));
+              window.dispatchEvent(new Event("auth-changed"));
+            } catch {}
+          }
+        }
+        // Refresh to recalculate accurate revenue and metrics
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error("Failed to update status:", err);
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  };
 
   if (!loading && !isLoggedIn) {
     return (
@@ -126,7 +215,7 @@ export default function SellerDashboardPage() {
           </div>
           <h2 className="mt-4 font-display text-xl font-bold">Sign In Required</h2>
           <p className="mt-2 max-w-md text-sm text-slate-600 dark:text-slate-300">
-            Please log in with your CUET account to access your personalized seller dashboard and live analytics.
+            Please log in with your CUET account to access your personalized seller analytics, wishlists count, and ad performance.
           </p>
           <div className="mt-6 flex gap-3">
             <Link href="/login">
@@ -143,19 +232,20 @@ export default function SellerDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* ── Top Header & Actions ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
-          title="Seller Dashboard"
+          title="Seller Analytics Dashboard"
           description={
             user?.fullName
-              ? `Welcome back, ${user.fullName}. Track your sales, listings, and campus trade activity.`
-              : "Analytics, inventory, listings, and performance insights."
+              ? `Welcome back, ${user.fullName}. Live buyer traffic, wishlist demand, and sales intelligence.`
+              : "Live analytics on ad clicks, wishlist counts, active inventory, and sales."
           }
         />
         <div className="flex items-center gap-2">
           <button
             onClick={fetchDashboardData}
-            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
             title="Refresh statistics"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -164,232 +254,446 @@ export default function SellerDashboardPage() {
           <Button
             variant="primary"
             onClick={() => setIsSellOpen(true)}
-            className="text-xs"
+            className="text-xs shadow-sm"
           >
             <PlusCircle size={15} className="mr-1.5" />
-            <span>New Listing</span>
+            <span>Post New Listing</span>
           </Button>
         </div>
       </div>
 
-      {/* Real Live Metrics Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex items-center gap-4 p-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-            <TrendingUp size={24} />
+      {/* ── Core KPI Analytics Grid (6 Cards, 2 side-by-side on mobile) ── */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {/* 1. Wishlisted By */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-rose-200/60 dark:border-rose-900/40 bg-gradient-to-br from-rose-50/50 to-transparent dark:from-rose-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 truncate">
+              Wishlist Saves
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
+              <Heart size={14} className="fill-rose-500" />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Revenue
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              {analytics.totalWishlists}
             </p>
-            <p className="mt-1 font-display text-2xl font-bold text-slate-900 dark:text-white">
-              ৳ {totalRevenue.toLocaleString("en-IN")}
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              {analytics.clickToSaveRate}% save rate
             </p>
           </div>
         </Card>
 
-        <Card className="flex items-center gap-4 p-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-            <Package size={24} />
+        {/* 2. Ad Clicks / Views */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 truncate">
+              Ad Clicks
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+              <Eye size={14} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              {analytics.totalAdClicks}
+            </p>
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              Total impressions
+            </p>
+          </div>
+        </Card>
+
+        {/* 3. Currently Active */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-emerald-200/60 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">
               Active Listings
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+              <Package size={14} />
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              {analytics.activeListings}
             </p>
-            <p className="mt-1 font-display text-2xl font-bold text-slate-900 dark:text-white">
-              {activeProducts}
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              Live on market
             </p>
           </div>
         </Card>
 
-        <Card className="flex items-center gap-4 p-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
-            <CheckCircle2 size={24} />
+        {/* 4. Total Revenue */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-teal-200/60 dark:border-teal-900/40 bg-gradient-to-br from-teal-50/50 to-transparent dark:from-teal-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 truncate">
+              Total Revenue
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300">
+              <TrendingUp size={14} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              ৳{analytics.totalRevenue.toLocaleString()}
+            </p>
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              From {analytics.soldItems} sales
+            </p>
+          </div>
+        </Card>
+
+        {/* 5. Items Sold */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-purple-200/60 dark:border-purple-900/40 bg-gradient-to-br from-purple-50/50 to-transparent dark:from-purple-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 truncate">
               Items Sold
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+              <CheckCircle2 size={14} />
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              {analytics.soldItems}
             </p>
-            <p className="mt-1 font-display text-2xl font-bold text-slate-900 dark:text-white">
-              {soldProducts}
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              {analytics.conversionRate}% conversion
             </p>
           </div>
         </Card>
 
-        <Card className="flex items-center gap-4 p-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
-            <Eye size={24} />
+        {/* 6. Potential Revenue */}
+        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 truncate">
+              Active Value
+            </span>
+            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+              <Sparkles size={14} />
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Listing Views
+          <div className="mt-2 sm:mt-3">
+            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+              ৳{analytics.potentialRevenue.toLocaleString()}
             </p>
-            <p className="mt-1 font-display text-2xl font-bold text-slate-900 dark:text-white">
-              {totalViews}
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              Pending inventory
             </p>
           </div>
         </Card>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Listings or Empty State */}
-        <Card className="lg:col-span-2 p-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-700/60">
-            <div>
-              <h2 className="font-display text-lg font-bold">Recent Listings</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Your latest items listed on CUET E-Bazar
-              </p>
-            </div>
-            {listings.length > 0 && (
-              <Link
-                href="/my-listings"
-                className="flex items-center gap-1 text-xs font-semibold text-brand-emerald hover:underline"
-              >
-                View all ({totalProducts})
-                <ArrowRight size={14} />
-              </Link>
-            )}
+      {/* ── Detailed Listing Analytics Table ── */}
+      <Card className="p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+              Listing Performance & Demand Analytics
+            </h2>
+            <p className="text-xs text-slate-500">
+              Breakdown of ad clicks, student wishlist saves, and active inventory status
+            </p>
           </div>
+          <Link
+            href="/my-listings"
+            className="text-xs font-semibold text-brand-emerald hover:underline inline-flex items-center gap-1 shrink-0"
+          >
+            Manage All Listings ({products.length}) <ArrowRight size={13} />
+          </Link>
+        </div>
 
-          {loading ? (
-            <div className="flex py-12 items-center justify-center text-sm text-slate-500">
-              <RefreshCw size={18} className="animate-spin mr-2" />
-              Loading your dashboard...
+        {loading ? (
+          <div className="flex py-16 items-center justify-center text-sm text-slate-500">
+            <RefreshCw size={20} className="animate-spin mr-2 text-brand-emerald" />
+            Analyzing your products...
+          </div>
+        ) : products.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400">
+              <ShoppingBag size={30} />
             </div>
-          ) : listings.length === 0 ? (
-            <div className="py-12 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
-                <ShoppingBag size={28} />
-              </div>
-              <h3 className="mt-3 font-semibold text-slate-800 dark:text-slate-200">
-                No Listings Yet
-              </h3>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                You haven&apos;t listed any items for sale or trade yet. Start earning by posting your books, electronics, or dorm essentials.
-              </p>
-              <div className="mt-5">
-                <Button variant="primary" onClick={() => setIsSellOpen(true)} className="text-xs">
-                  <PlusCircle size={15} className="mr-1.5" />
-                  List Your First Product
-                </Button>
-              </div>
+            <h3 className="mt-4 font-semibold text-slate-800 dark:text-slate-200">
+              No Listings Found
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+              Start posting your gadgets, textbooks, drawing tools, or cycles to track live buyer demand and ad clicks here.
+            </p>
+            <div className="mt-5">
+              <Button variant="primary" onClick={() => setIsSellOpen(true)} className="text-xs">
+                <PlusCircle size={15} className="mr-1.5" />
+                List Your First Item
+              </Button>
             </div>
-          ) : (
-            <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
-              {recentListings.map((item) => {
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card View: All options visible at once, no horizontal scrolling needed */}
+            <div className="mt-3 space-y-2.5 md:hidden">
+              {products.map((item) => {
                 const firstImg = item.images?.[0];
-                const imgSrc = typeof firstImg === "string" ? firstImg : firstImg?.thumbnailUrl || firstImg?.url || "";
+                const imgSrc =
+                  typeof firstImg === "string"
+                    ? firstImg
+                    : firstImg?.thumbnailUrl || firstImg?.url || "";
 
                 return (
-                  <div key={item._id} className="flex items-center justify-between py-3.5 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <div
+                    key={item._id}
+                    className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 shadow-sm space-y-2.5"
+                  >
+                    {/* Top Row: Thumbnail + Title + Status */}
+                    <div className="flex items-start gap-2.5">
+                      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
                         {imgSrc ? (
                           imgSrc.startsWith("data:") ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={imgSrc} alt={item.title} className="h-full w-full object-cover" />
+                            <img src={imgSrc} alt={item.title} className="h-full w-full object-contain p-0.5" />
                           ) : (
-                            <Image src={imgSrc} alt={item.title} fill className="object-cover" sizes="48px" />
+                            <Image src={imgSrc} alt={item.title} fill className="object-contain p-0.5" sizes="56px" />
                           )
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center text-slate-400">
-                            <ShoppingBag size={18} />
-                          </div>
+                          <ShoppingBag size={20} className="text-slate-400" />
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                          {item.title}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                          <span>{item.category}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Clock size={11} />
-                            {new Date(item.createdAt).toLocaleDateString()}
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-1">
+                          <Link
+                            href={`/marketplace/${item._id}`}
+                            className="font-semibold text-xs text-slate-900 dark:text-slate-100 hover:text-brand-emerald line-clamp-2"
+                          >
+                            {item.title}
+                          </Link>
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                              item.status === "active"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : item.status === "sold"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                            }`}
+                          >
+                            {item.status}
                           </span>
                         </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {item.category} • {item.condition}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <p className="font-semibold text-sm text-brand-emerald">
-                          ৳ {item.price.toLocaleString("en-IN")}
-                        </p>
+                    {/* Middle Row: Price & Metrics (Ad Clicks & Saves) */}
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2 text-xs">
+                      <div>
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                          ৳{item.price.toLocaleString()}
+                        </span>
+                        {item.originalPrice && Number(item.originalPrice) > Number(item.price) && (
+                          <span className="ml-1.5 text-[10px] text-slate-400 line-through">
+                            ৳{Number(item.originalPrice).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-[10px]">
+                          <Eye size={11} />
+                          {item.viewsCount}
+                        </span>
                         <span
-                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            item.status === "active"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              : item.status === "sold"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                              : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                            item.wishlistCount > 0
+                              ? "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300"
+                              : "bg-slate-100 text-slate-400 dark:bg-slate-800"
                           }`}
                         >
-                          {item.status.toUpperCase()}
+                          <Heart
+                            size={11}
+                            className={item.wishlistCount > 0 ? "fill-rose-500 text-rose-500" : ""}
+                          />
+                          {item.wishlistCount}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Bottom Row: Actions (No sideways scroll, full visibility) */}
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+                      {item.status === "active" ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(item._id, "sold")}
+                          disabled={statusUpdatingId === item._id}
+                          className="w-full rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 py-1.5 text-xs font-semibold transition text-center"
+                        >
+                          Mark Sold
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(item._id, "active")}
+                          disabled={statusUpdatingId === item._id}
+                          className="w-full rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 py-1.5 text-xs font-semibold transition text-center"
+                        >
+                          Re-activate
+                        </button>
+                      )}
+                      <Link
+                        href={`/marketplace/${item._id}`}
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1 text-center"
+                      >
+                        <ExternalLink size={12} /> View Ad
+                      </Link>
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </Card>
 
-        {/* Quick Links & Tips */}
-        <div className="space-y-6">
-          <Card className="p-5">
-            <h3 className="font-display font-bold text-sm uppercase tracking-wide text-slate-700 dark:text-slate-300">
-              Quick Navigation
-            </h3>
-            <div className="mt-3 space-y-2">
-              <Link
-                href="/my-listings"
-                className="flex items-center justify-between rounded-lg border border-slate-100 p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-emerald dark:border-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <div className="flex items-center gap-2">
-                  <Package size={16} />
-                  <span>Manage My Listings</span>
-                </div>
-                <ArrowRight size={14} />
-              </Link>
-              <Link
-                href="/messages"
-                className="flex items-center justify-between rounded-lg border border-slate-100 p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-emerald dark:border-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <div className="flex items-center gap-2">
-                  <MessageSquare size={16} />
-                  <span>Buyer Messages</span>
-                </div>
-                <ArrowRight size={14} />
-              </Link>
-              <Link
-                href="/settings"
-                className="flex items-center justify-between rounded-lg border border-slate-100 p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-emerald dark:border-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} />
-                  <span>Account Settings</span>
-                </div>
-                <ArrowRight size={14} />
-              </Link>
+            {/* Desktop Table View (Retained for md and larger screens) */}
+            <div className="mt-4 hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-2 font-bold">Product</th>
+                    <th className="py-3 px-3 font-bold">Price</th>
+                    <th className="py-3 px-3 font-bold text-center">Ad Clicks</th>
+                    <th className="py-3 px-3 font-bold text-center">Wishlists</th>
+                    <th className="py-3 px-3 font-bold">Status</th>
+                    <th className="py-3 px-2 font-bold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                  {products.map((item) => {
+                    const firstImg = item.images?.[0];
+                    const imgSrc =
+                      typeof firstImg === "string"
+                        ? firstImg
+                        : firstImg?.thumbnailUrl || firstImg?.url || "";
+
+                    return (
+                      <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                        {/* Product Column */}
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-3 min-w-[220px]">
+                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
+                              {imgSrc ? (
+                                imgSrc.startsWith("data:") ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={imgSrc} alt={item.title} className="h-full w-full object-contain p-0.5" />
+                                ) : (
+                                  <Image src={imgSrc} alt={item.title} fill className="object-contain p-0.5" sizes="48px" />
+                                )
+                              ) : (
+                                <ShoppingBag size={18} className="text-slate-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <Link
+                                href={`/marketplace/${item._id}`}
+                                className="font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-emerald hover:underline line-clamp-1"
+                              >
+                                {item.title}
+                              </Link>
+                              <p className="text-[11px] text-slate-400">
+                                {item.category} • {item.condition}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Price Column */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            ৳{item.price.toLocaleString()}
+                          </span>
+                          {item.originalPrice && Number(item.originalPrice) > Number(item.price) && (
+                            <span className="block text-[10px] text-slate-400 line-through">
+                              ৳{Number(item.originalPrice).toLocaleString()}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Ad Clicks Column */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-xs">
+                            <Eye size={12} />
+                            {item.viewsCount}
+                          </span>
+                        </td>
+
+                        {/* Wishlist Column */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-full text-xs ${
+                              item.wishlistCount > 0
+                                ? "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 ring-1 ring-rose-500/20"
+                                : "bg-slate-100 text-slate-400 dark:bg-slate-800"
+                            }`}
+                          >
+                            <Heart
+                              size={12}
+                              className={item.wishlistCount > 0 ? "fill-rose-500 text-rose-500" : ""}
+                            />
+                            {item.wishlistCount} {item.wishlistCount === 1 ? "save" : "saves"}
+                          </span>
+                        </td>
+
+                        {/* Status Column */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              item.status === "active"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : item.status === "sold"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+
+                        {/* Actions Column */}
+                        <td className="py-3 px-2 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            {item.status === "active" ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatus(item._id, "sold")}
+                                disabled={statusUpdatingId === item._id}
+                                className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 px-2 py-1 text-[10px] font-semibold transition"
+                              >
+                                Mark Sold
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatus(item._id, "active")}
+                                disabled={statusUpdatingId === item._id}
+                                className="rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-1 text-[10px] font-semibold transition"
+                              >
+                                Re-activate
+                              </button>
+                            )}
+                            <Link
+                              href={`/marketplace/${item._id}`}
+                              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-0.5"
+                            >
+                              <ExternalLink size={10} /> View
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </Card>
-
-          <Card className="p-5 bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border-brand-emerald/20">
-            <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <Sparkles size={16} className="text-brand-emerald" />
-              Campus Seller Tip
-            </h4>
-            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Meeting at well-known spots like <strong>TSC Cafeteria</strong>, <strong>Shaheed Minar</strong>, or your <strong>Hall Gate</strong> ensures safe and fast product handovers between CUETians.
-            </p>
-          </Card>
-        </div>
-      </div>
+          </>
+        )}
+      </Card>
 
       <SellModal
         isOpen={isSellOpen}

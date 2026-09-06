@@ -10,6 +10,12 @@ import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
 import { CUET_DEPARTMENTS, CUET_HALLS } from "@/data/mock";
 import { API_BASE_URL } from "@/lib/api";
+import {
+  auth,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  isFirebaseConfigured
+} from "@/lib/firebase";
 
 type RoleOption = "student" | "shop_owner";
 
@@ -127,24 +133,52 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      const email = role === "student" ? studentForm.email.trim().toLowerCase() : shopForm.email.trim().toLowerCase();
+      const password = role === "student" ? studentForm.password : shopForm.password;
+      let firebaseUid: string | undefined = undefined;
+
+      // ── Optional Firebase Email Auth step if configured ──
+      if (isFirebaseConfigured && auth) {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          firebaseUid = userCredential.user.uid;
+          try {
+            await sendEmailVerification(userCredential.user);
+          } catch (vErr) {
+            console.warn("Could not send Firebase verification email:", vErr);
+          }
+        } catch (fbErr: any) {
+          if (fbErr.code === "auth/email-already-in-use") {
+            throw new Error("This email is already registered in Firebase. Please log in.");
+          } else if (fbErr.code === "auth/weak-password") {
+            throw new Error("Password is too weak. Please use at least 6 characters.");
+          } else if (fbErr.code === "auth/invalid-email") {
+            throw new Error("Invalid email format for Firebase authentication.");
+          } else {
+            console.warn("Firebase Auth registration warning:", fbErr.message);
+          }
+        }
+      }
+
       const payload =
         role === "student"
           ? {
               role: "student",
               fullName: studentForm.fullName.trim(),
               studentId: studentForm.studentId.trim(),
-              email: studentForm.email.trim().toLowerCase(),
+              email,
               department: studentForm.department,
               hall: studentForm.hall,
               contactNumber: studentForm.contactNumber.trim(),
-              password: studentForm.password
+              password,
+              ...(firebaseUid ? { firebaseUid } : {})
             }
           : {
               role: "shop_owner",
               fullName: shopForm.fullName.trim(),
-              email: shopForm.email.trim().toLowerCase(),
+              email,
               contactNumber: shopForm.contactNumber.trim(),
-              password: shopForm.password,
+              password,
               shopName: shopForm.shopName.trim(),
               shopCategory: shopForm.shopCategory,
               shopDescription: shopForm.shopDescription.trim(),
@@ -152,7 +186,8 @@ export default function SignupPage() {
               operatingHours: {
                 open: shopForm.openTime,
                 close: shopForm.closeTime
-              }
+              },
+              ...(firebaseUid ? { firebaseUid } : {})
             };
 
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
@@ -170,17 +205,20 @@ export default function SignupPage() {
       if (data.token) {
         localStorage.setItem("cuet_ebazar_token", data.token);
         localStorage.setItem("cuet_ebazar_user", JSON.stringify(data.user));
+        window.dispatchEvent(new Event("auth-changed"));
       }
 
       setSuccessMsg(
-        role === "shop_owner"
+        isFirebaseConfigured
+          ? "Account created & Firebase verification email sent! Check your inbox."
+          : role === "shop_owner"
           ? "Shop Owner account and shop profile created successfully! Redirecting..."
           : "Account created successfully! Redirecting to marketplace..."
       );
 
       setTimeout(() => {
         router.push(role === "shop_owner" ? "/dashboard" : "/home");
-      }, 1200);
+      }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to connect to registration server.";
       setError(message);

@@ -25,9 +25,9 @@ if (isCloudinaryConfigured) {
       folder: 'ebazar/products',
       allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'heic'],
       transformation: [
-        { quality: 'auto:good' },
+        { quality: 'auto:best' },
         { fetch_format: 'auto' },
-        { width: 1200, crop: 'limit' }
+        { width: 1600, crop: 'limit' }
       ]
     }
   });

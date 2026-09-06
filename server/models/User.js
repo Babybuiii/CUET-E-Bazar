@@ -123,9 +123,15 @@ const userSchema = new mongoose.Schema(
       }
     },
 
+    firebaseUid: {
+      type: String,
+      sparse: true,
+      index: true
+    },
+
     passwordHash: {
       type: String,
-      required: [true, 'Password is required']
+      default: ''
     },
 
     // ── Role ────────────────────────────────────────────────────────────────

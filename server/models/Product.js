@@ -81,7 +81,8 @@ const productSchema = new mongoose.Schema(
         {
           url: { type: String, required: true },          // e.g. https://res.cloudinary.com/.../v1/.../image.jpg
           thumbnailUrl: { type: String, required: true }, // e.g. same URL with /c_fill,w_400,h_400/ transform
-          publicId: { type: String, required: true }      // e.g. ebazar/products/abc123
+          publicId: { type: String, required: true },      // e.g. ebazar/products/abc123
+          isCover: { type: Boolean, default: false }
         }
       ],
       validate: [

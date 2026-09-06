@@ -68,14 +68,14 @@ function ListingThumbnail({ src, alt }: { src: string; alt: string }) {
       <img
         src={src}
         alt={alt}
-        className="h-20 w-20 rounded-xl object-cover border border-slate-200 dark:border-slate-800 shrink-0"
+        className="h-20 w-20 rounded-xl object-contain p-1 border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-900"
       />
     );
   }
 
   return (
-    <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900">
-      <Image src={src} alt={alt} fill sizes="80px" className="object-cover" />
+    <div className="relative h-20 w-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+      <Image src={src} alt={alt} fill sizes="80px" className="object-contain p-1" />
     </div>
   );
 }
@@ -155,6 +155,7 @@ export default function MyListingsPage() {
     }
   };
 
+
   // ── Feature 2: Toggle Status (Mark as Sold / Active / Reserved) ──
   const handleToggleStatus = async (productId: string, newStatus: "active" | "sold" | "reserved") => {
     const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
@@ -173,6 +174,17 @@ export default function MyListingsPage() {
       const data = await res.json();
 
       if (data.success) {
+        if (typeof data.totalProductsSold === "number") {
+          const cached = localStorage.getItem("cuet_ebazar_user");
+          if (cached) {
+            try {
+              const u = JSON.parse(cached);
+              u.totalProductsSold = data.totalProductsSold;
+              localStorage.setItem("cuet_ebazar_user", JSON.stringify(u));
+              window.dispatchEvent(new Event("auth-changed"));
+            } catch {}
+          }
+        }
         setListings((prev) =>
           prev.map((item) =>
             (item._id || item.id) === productId ? { ...item, status: newStatus } : item
@@ -425,6 +437,7 @@ export default function MyListingsPage() {
                         ))}
                       </div>
                     )}
+
                   </div>
                 </div>
 

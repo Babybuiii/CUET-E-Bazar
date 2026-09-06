@@ -1,7 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Tag, Percent, DollarSign, Sparkles, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Tag,
+  Percent,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+  Image as ImageIcon,
+  Upload,
+  Star
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { API_BASE_URL } from "@/lib/api";
@@ -66,6 +78,8 @@ type EditProductModalProps = {
 };
 
 export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditProductModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     title: "",
     price: 0,
@@ -79,6 +93,12 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
     isNegotiable: false,
     tags: [] as string[]
   });
+
+  // Photos state
+  const [existingImages, setExistingImages] = useState<any[]>([]);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [newPreviews, setNewPreviews] = useState<string[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
 
   const [customTag, setCustomTag] = useState("");
   const [loading, setLoading] = useState(false);
@@ -100,12 +120,76 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
         isNegotiable: !!product.isNegotiable,
         tags: Array.isArray(product.tags) ? product.tags : []
       });
+
+      const initialImgs = Array.isArray(product.images) ? [...product.images] : [];
+      setExistingImages(initialImgs);
+      setNewFiles([]);
+      setNewPreviews([]);
+
+      // Find cover index if marked
+      const initCover = initialImgs.findIndex(
+        (img: any) => img && (img.isCover || (typeof img === "object" && img.isCover))
+      );
+      setCoverIndex(initCover >= 0 ? initCover : 0);
+
       setError(null);
       setSuccess(false);
     }
   }, [product]);
 
   if (!isOpen || !product) return null;
+
+  const totalPhotosCount = existingImages.length + newFiles.length;
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    if (!e.target.files) return;
+
+    const files = Array.from(e.target.files);
+    if (existingImages.length + newFiles.length + files.length > 8) {
+      setError("A product listing can have at most 8 photos.");
+      return;
+    }
+
+    const combined = [...newFiles, ...files];
+    setNewFiles(combined);
+
+    const previews = files.map((f) => URL.createObjectURL(f));
+    setNewPreviews((prev) => [...prev, ...previews]);
+  };
+
+  const handleRemoveExistingPhoto = (idx: number) => {
+    if (totalPhotosCount <= 3) {
+      setError("A listing must have at least 3 photos. Add a new photo before removing this one.");
+      return;
+    }
+    setError(null);
+    setExistingImages((prev) => prev.filter((_, i) => i !== idx));
+
+    if (coverIndex === idx) {
+      setCoverIndex(0);
+    } else if (coverIndex > idx) {
+      setCoverIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleRemoveNewPhoto = (idx: number) => {
+    if (totalPhotosCount <= 3) {
+      setError("A listing must have at least 3 photos. Add a new photo before removing this one.");
+      return;
+    }
+    setError(null);
+    const globalIdx = existingImages.length + idx;
+    URL.revokeObjectURL(newPreviews[idx]);
+    setNewFiles((prev) => prev.filter((_, i) => i !== idx));
+    setNewPreviews((prev) => prev.filter((_, i) => i !== idx));
+
+    if (coverIndex === globalIdx) {
+      setCoverIndex(0);
+    } else if (coverIndex > globalIdx) {
+      setCoverIndex((prev) => prev - 1);
+    }
+  };
 
   // Tag helper
   const handleToggleTag = (tag: string) => {
@@ -141,7 +225,6 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
   const handleDiscountChange = (discountPercent: number) => {
     const validDiscount = Math.min(99, Math.max(0, discountPercent));
     setFormData((prev) => {
-      // If there's an original price, recompute price
       const orig = Number(prev.originalPrice) || prev.price;
       const newPrice = orig > 0 && validDiscount > 0 ? Math.round(orig * (1 - validDiscount / 100)) : orig;
       return {
@@ -156,6 +239,12 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (totalPhotosCount < 3) {
+      setError("A listing must have at least 3 photos. Please add more photos.");
+      return;
+    }
+
     setLoading(true);
 
     const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
@@ -166,36 +255,42 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
     }
 
     try {
+      const data = new FormData();
+      data.append("title", formData.title.trim());
+      data.append("description", formData.description.trim());
+      data.append("price", String(formData.price));
+      data.append("originalPrice", formData.originalPrice ? String(formData.originalPrice) : "");
+      data.append("discount", String(formData.discount));
+      data.append("category", formData.category);
+      data.append("condition", formData.condition);
+      data.append("location", formData.location);
+      data.append("status", formData.status);
+      data.append("isNegotiable", String(formData.isNegotiable));
+      data.append("tags", JSON.stringify(formData.tags));
+      data.append("coverIndex", String(coverIndex));
+      data.append("existingImages", JSON.stringify(existingImages));
+
+      newFiles.forEach((f) => {
+        data.append("newImages", f);
+      });
+
       const res = await fetch(`${API_BASE_URL}/api/products/${product._id || product.id}`, {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          title: formData.title,
-          description: formData.description,
-          price: Number(formData.price),
-          originalPrice: formData.originalPrice ? Number(formData.originalPrice) : null,
-          discount: Number(formData.discount),
-          category: formData.category,
-          condition: formData.condition,
-          location: formData.location,
-          status: formData.status,
-          tags: formData.tags,
-          isNegotiable: formData.isNegotiable
-        })
+        body: data
       });
 
-      const data = await res.json();
-      if (data.success && data.product) {
+      const result = await res.json();
+      if (result.success && result.product) {
         setSuccess(true);
-        onUpdated(data.product);
+        onUpdated(result.product);
         setTimeout(() => {
           onClose();
-        }, 600);
+        }, 800);
       } else {
-        setError(data.message || "Failed to update listing.");
+        setError(result.message || "Failed to update listing.");
       }
     } catch (err) {
       setError("Server error while updating. Please make sure the backend is running.");
@@ -203,6 +298,22 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
       setLoading(false);
     }
   };
+
+  // Unified list of all photos (existing + newly chosen)
+  const allPhotos = [
+    ...existingImages.map((img, idx) => ({
+      isNew: false,
+      idx,
+      globalIdx: idx,
+      url: typeof img === "object" ? img.thumbnailUrl || img.url : img
+    })),
+    ...newPreviews.map((url, idx) => ({
+      isNew: true,
+      idx,
+      globalIdx: existingImages.length + idx,
+      url
+    }))
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
@@ -217,7 +328,7 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
               <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                 Edit Product Listing
               </h2>
-              <p className="text-xs text-slate-500">Update price, tags, discounts, and availability.</p>
+              <p className="text-xs text-slate-500">Update photos, cover image, price, tags, and availability.</p>
             </div>
           </div>
           <button
@@ -244,6 +355,124 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
             </div>
           )}
 
+          {/* ── Photos & Cover Photo Selection (Feature 1 & 2) ── */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700/70 dark:bg-slate-800/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                <ImageIcon size={15} className="text-brand-emerald" />
+                Product Photos & Cover Photo
+                <span className="text-[11px] font-normal text-slate-500">(Min 3, Max 8)</span>
+              </label>
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  totalPhotosCount >= 3
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                {totalPhotosCount}/8 photos {totalPhotosCount >= 3 ? "✓" : `(need ${3 - totalPhotosCount} more)`}
+              </span>
+            </div>
+
+            {/* Photos Grid with Cover Selection */}
+            {allPhotos.length > 0 && (
+              <div className="grid grid-cols-4 gap-2.5">
+                {allPhotos.map((item) => {
+                  const isCover = item.globalIdx === coverIndex;
+                  return (
+                    <div
+                      key={item.globalIdx}
+                      onClick={() => setCoverIndex(item.globalIdx)}
+                      className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition cursor-pointer bg-white dark:bg-slate-900 ${
+                        isCover
+                          ? "border-brand-emerald ring-2 ring-brand-emerald/40 shadow-sm"
+                          : "border-slate-200 hover:border-brand-emerald/50 dark:border-slate-700"
+                      }`}
+                      title={isCover ? "Current Cover Photo" : "Click to select as Cover Photo"}
+                    >
+                      <img
+                        src={item.url}
+                        alt={`Photo ${item.globalIdx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+
+                      {/* Cover Badge */}
+                      {isCover ? (
+                        <span className="absolute top-1 left-1 flex items-center gap-1 rounded bg-brand-emerald px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+                          <Star size={10} className="fill-amber-300 text-amber-300" />
+                          Cover
+                        </span>
+                      ) : (
+                        <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
+                          #{item.globalIdx + 1}
+                        </span>
+                      )}
+
+                      {/* Set as Cover button on hover */}
+                      {!isCover && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCoverIndex(item.globalIdx);
+                          }}
+                          className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100 hover:bg-brand-emerald"
+                        >
+                          <Star size={9} />
+                          Set Cover
+                        </button>
+                      )}
+
+                      {/* Remove button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (item.isNew) {
+                            handleRemoveNewPhoto(item.idx);
+                          } else {
+                            handleRemoveExistingPhoto(item.idx);
+                          }
+                        }}
+                        className="absolute right-1 top-1 rounded-full bg-rose-600/90 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-700"
+                        title="Remove photo"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Instruction Tip */}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <Star size={12} className="text-amber-500 shrink-0 fill-amber-500" />
+              <span>
+                <strong>Cover Photo:</strong> Click any photo above to set it as the primary cover photo for your ad.
+              </span>
+            </p>
+
+            {/* Upload New Photos Button */}
+            {totalPhotosCount < 8 && (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white dark:bg-slate-900 dark:border-slate-700 py-3 text-xs font-semibold text-brand-emerald hover:border-brand-emerald transition"
+              >
+                <Upload size={16} />
+                <span>Add More Photos ({8 - totalPhotosCount} slots left)</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -258,143 +487,61 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
             />
           </div>
 
-          {/* Pricing & Discounts (Feature 5) */}
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-              <Percent size={15} /> Pricing & Discount Deals
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Selling Price */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Selling Price (৳) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs sm:text-sm font-bold text-brand-emerald focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
-                />
-              </div>
-
-              {/* Original Price */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Original Price (৳) (Optional)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 45000"
-                  value={formData.originalPrice}
-                  onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
-                />
-              </div>
-
-              {/* Discount Percentage */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Discount (%)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="99"
-                  value={formData.discount}
-                  onChange={(e) => handleDiscountChange(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs sm:text-sm font-semibold text-rose-500 focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {Number(formData.discount) > 0 && (
-              <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
-                🏷️ Active deal: <strong className="font-bold">{formData.discount}% OFF</strong> badge will appear on your listing!
-              </p>
-            )}
-          </div>
-
-          {/* Product Badges / Tags (Feature 4) */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Tag size={15} className="text-brand-emerald" /> Product Tags & Highlights
+          {/* Price & Original Price */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Selling Price (৳) *
               </label>
-              <span className="text-[10px] text-slate-400">Click to add/remove</span>
-            </div>
-
-            {/* Preset Tag Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {PRESET_TAGS.map((tag) => {
-                const isSelected = formData.tags.includes(tag);
-                return (
-                  <button
-                    type="button"
-                    key={tag}
-                    onClick={() => handleToggleTag(tag)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold transition ${
-                      isSelected
-                        ? "bg-brand-emerald text-white shadow-sm"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                    }`}
-                  >
-                    {isSelected ? `✓ ${tag}` : `+ ${tag}`}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Custom Tag Input */}
-            <div className="flex items-center gap-2 pt-1">
               <input
-                type="text"
-                placeholder="Add custom tag (e.g. Price Reduced)..."
-                value={customTag}
-                onChange={(e) => setCustomTag(e.target.value)}
-                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 text-xs focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
+                type="number"
+                required
+                min="0"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-emerald focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
               />
-              <Button
-                type="button"
-                onClick={handleAddCustomTag}
-                disabled={!customTag.trim()}
-                variant="ghost"
-                className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 px-3 py-1.5 h-auto"
-              >
-                Add Tag
-              </Button>
             </div>
-
-            {/* Selected Tags list */}
-            {formData.tags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] text-slate-400 font-medium">Selected:</span>
-                {formData.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-emerald/10 text-brand-emerald text-xs font-bold"
-                  >
-                    #{t}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(t)}
-                      className="hover:text-rose-500 ml-0.5"
-                      title="Remove tag"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Original Price (৳) (Optional)
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 1500"
+                value={formData.originalPrice}
+                onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
+              />
+            </div>
           </div>
 
-          {/* Category, Condition, Status (Feature 2) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Category */}
+          {/* Quick Discount Presets */}
+          <div>
+            <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              <Percent size={13} className="text-rose-500" /> Apply Quick Discount Badge
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {[0, 10, 15, 20, 25, 30, 40, 50].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => handleDiscountChange(pct)}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+                    formData.discount === pct
+                      ? "bg-rose-500 text-white border-rose-500 shadow-sm"
+                      : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  {pct === 0 ? "No Discount" : `${pct}% OFF`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Category & Condition */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Category
@@ -404,15 +551,13 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
               >
-                {PRODUCT_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
+                {PRODUCT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
                   </option>
                 ))}
               </select>
             </div>
-
-            {/* Condition */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Condition
@@ -429,35 +574,13 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
                 ))}
               </select>
             </div>
-
-            {/* Status (Active / Sold / Reserved) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Listing Status
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className={`w-full rounded-xl border font-bold px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:outline-none ${
-                  formData.status === "sold"
-                    ? "bg-rose-50 border-rose-300 text-rose-600 dark:bg-rose-950/40"
-                    : formData.status === "reserved"
-                    ? "bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/40"
-                    : "bg-emerald-50 border-emerald-300 text-brand-emerald dark:bg-emerald-950/40"
-                }`}
-              >
-                <option value="active">🟢 Active (Available for sale)</option>
-                <option value="sold">🔴 Sold (Deal completed)</option>
-                <option value="reserved">🟡 Reserved (Handover pending)</option>
-              </select>
-            </div>
           </div>
 
-          {/* Pickup Location & Negotiable */}
+          {/* Location & Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Campus Pickup Location
+                Campus Location
               </label>
               <select
                 value={formData.location}
@@ -471,51 +594,117 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
                 ))}
               </select>
             </div>
-
-            <div className="flex items-center gap-3 pt-6">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={formData.isNegotiable}
-                  onChange={(e) => setFormData({ ...formData, isNegotiable: e.target.checked })}
-                  className="rounded border-slate-300 text-brand-emerald focus:ring-brand-emerald h-4 w-4"
-                />
-                <span>Price is Negotiable</span>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Availability Status
               </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
+              >
+                <option value="active">Active (Available)</option>
+                <option value="reserved">Reserved (Buyer Waiting)</option>
+                <option value="sold">Sold (Out of Stock)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Negotiable toggle */}
+          <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={formData.isNegotiable}
+              onChange={(e) => setFormData({ ...formData, isNegotiable: e.target.checked })}
+              className="rounded text-brand-emerald focus:ring-brand-emerald"
+            />
+            <span>Price is slightly negotiable on meet</span>
+          </label>
+
+          {/* Promotional Tags */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <Tag size={13} className="text-brand-emerald" /> Promotional Tags & Badges
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_TAGS.map((tag) => {
+                const active = formData.tags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => handleToggleTag(tag)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition font-medium ${
+                      active
+                        ? "bg-brand-emerald text-white border-brand-emerald shadow-sm"
+                        : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    {active ? `✓ ${tag}` : `+ ${tag}`}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Tag Input */}
+            <div className="flex gap-2 pt-1">
+              <input
+                type="text"
+                placeholder="Add custom tag (e.g. 1st Year Book)..."
+                value={customTag}
+                onChange={(e) => setCustomTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddCustomTag(e);
+                  }
+                }}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 text-xs focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
+              />
+              <Button
+                type="button"
+                onClick={handleAddCustomTag}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-800 dark:text-slate-200 text-xs py-1 px-3"
+              >
+                Add Tag
+              </Button>
             </div>
           </div>
 
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Description & Specifications
+              Description
             </label>
             <textarea
               rows={3}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Provide condition details, usage duration, pickup points..."
               className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3 text-xs sm:text-sm focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
             />
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+          {/* Footer actions */}
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Button
               type="button"
               variant="ghost"
               onClick={onClose}
-              className="text-xs px-4"
+              className="text-xs"
+              disabled={loading}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="border-brand-emerald bg-brand-emerald text-white hover:bg-[#0d665f] text-xs px-5 font-semibold"
+              className="border-brand-emerald bg-brand-emerald text-white hover:bg-[#0d665f] text-xs px-5 py-2 font-semibold"
             >
               {loading ? (
                 <>
-                  <Loader2 size={14} className="animate-spin mr-1.5" /> Saving...
+                  <Loader2 size={14} className="mr-1.5 animate-spin" />
+                  Saving Changes...
                 </>
               ) : (
                 "Save Changes"

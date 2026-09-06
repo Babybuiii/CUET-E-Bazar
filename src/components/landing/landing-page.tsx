@@ -3,15 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MapPin, Menu, Search, ShoppingCart, Loader2, ShoppingBag } from "lucide-react";
+import { Search, Loader2, ShoppingBag } from "lucide-react";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProductCard } from "@/components/marketplace/product-card";
+import { AppFooter } from "@/components/shell/app-footer";
 import { API_BASE_URL } from "@/lib/api";
-
-const quickMenu = ["All", "Today Deals", "Marketplace", "Giveaways", "Campus Shops", "Customer Service"];
 
 export function LandingPage() {
   const router = useRouter();
@@ -49,60 +48,75 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#eaeded]">
-      <header className="sticky top-0 z-30 bg-[#131921] px-3 py-2 text-white sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-[1500px] items-center gap-3">
-          <div className="rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70">
-            <Logo href="/home" />
-          </div>
-          <button className="hidden items-center gap-2 rounded-sm px-2 py-1 text-left hover:outline hover:outline-1 hover:outline-white/70 md:flex" aria-label="Delivery location">
-            <MapPin size={16} />
-            <span className="text-xs leading-tight text-slate-200">
-              Deliver to
-              <span className="block text-sm font-semibold text-white">CUET Campus</span>
-            </span>
-          </button>
-          <form onSubmit={handleSearch} className="focus-ring flex flex-1 items-center overflow-hidden rounded-md bg-white text-[#0f1111]">
-            <span className="hidden bg-slate-100 px-3 py-2 text-xs text-slate-700 sm:inline">All</span>
-            <input
-              aria-label="Search products"
-              placeholder="Search CUET E-Bazar"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border-0 px-3 py-2 text-sm outline-none"
-            />
-            <button type="submit" className="h-full bg-[#febd69] px-3 py-2 text-[#0f1111] hover:bg-[#f3a847]" aria-label="Search">
-              <Search size={18} />
-            </button>
-          </form>
-          <Link href="/login" className="hidden rounded-sm px-2 py-1 text-xs hover:outline hover:outline-1 hover:outline-white/70 md:block">
-            Hello, sign in
-            <span className="block text-sm font-semibold">Account</span>
-          </Link>
-          <Link href="/signup" className="hidden rounded-sm px-2 py-1 text-xs hover:outline hover:outline-1 hover:outline-white/70 md:block">
-            New to CUET?
-            <span className="block text-sm font-semibold">Join now</span>
-          </Link>
-          <Link href="/login" className="inline-flex items-center gap-1 rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Cart">
-            <ShoppingCart size={20} />
-            <span className="text-sm font-semibold">Cart</span>
-          </Link>
-        </div>
-      </header>
+      {/* ── Permanent Sticky Header & Quick Navigation Topbar ── */}
+      <div className="sticky top-0 z-40 w-full shadow-md">
+        <header className="bg-[#131921] px-3 py-2 text-white sm:px-5 lg:px-8">
+          <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
+            <div className="rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70 shrink-0">
+              <Logo href="/" />
+            </div>
 
-      <div className="border-b border-[#37475a] bg-[#232f3e] px-3 py-2 text-sm text-white sm:px-5 lg:px-8">
-        <div className="mx-auto flex max-w-[1500px] items-center gap-5 overflow-x-auto whitespace-nowrap">
-          <Link href="/marketplace" className="inline-flex items-center gap-2 rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Open menu">
-            <Menu size={16} /> All
-          </Link>
-          {quickMenu.map((item) => (
+            <form onSubmit={handleSearch} className="focus-ring flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]">
+              <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
+              <input
+                aria-label="Search products"
+                placeholder="Search products, calculators, bicycles, books..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
+              />
+              <button type="submit" className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111] hover:bg-[#f3a847] transition active:scale-95" aria-label="Search">
+                <Search size={16} />
+              </button>
+            </form>
+
+            {/* Highlighted Sign in / Register buttons */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <Link
+                href="/login"
+                className="focus-ring inline-flex items-center justify-center rounded-lg bg-brand-emerald hover:bg-[#0d665f] text-white font-bold px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm transition shadow-sm active:scale-95"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup"
+                className="focus-ring inline-flex items-center justify-center rounded-lg bg-[#ffa41c] hover:bg-[#f39200] text-[#0f1111] font-bold px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm transition shadow-sm active:scale-95"
+              >
+                Register
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        {/* ── Logged out Topbar: Only 4 options (Home, Marketplace, Giveaways, Campus Shops) ── */}
+        <div className="border-b border-[#37475a] bg-[#232f3e] px-3 py-1.5 text-sm text-white sm:px-5 lg:px-8">
+          <div className="mx-auto flex max-w-[1500px] items-center gap-2 sm:gap-4 overflow-x-auto whitespace-nowrap scrollbar-none py-0.5">
             <Link
-              key={item}
-              href={item === "Customer Service" ? "/login" : "/marketplace"}
-              className="cursor-pointer rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70"
+              href="/"
+              className="rounded-md px-3 py-1 text-xs sm:text-sm font-bold bg-brand-emerald text-white shadow-sm ring-1 ring-emerald-400/50 flex items-center gap-1 shrink-0"
             >
-              {item}
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-sm shrink-0 animate-pulse" />
+              <span>Home</span>
             </Link>
-          ))}
+            <Link
+              href="/marketplace"
+              className="rounded-md px-3 py-1 text-xs sm:text-sm font-medium text-slate-200 hover:text-white hover:bg-white/10 transition shrink-0"
+            >
+              Marketplace
+            </Link>
+            <Link
+              href="/giveaways"
+              className="rounded-md px-3 py-1 text-xs sm:text-sm font-medium text-slate-200 hover:text-white hover:bg-white/10 transition shrink-0"
+            >
+              Giveaways
+            </Link>
+            <Link
+              href="/shops"
+              className="rounded-md px-3 py-1 text-xs sm:text-sm font-medium text-slate-200 hover:text-white hover:bg-white/10 transition shrink-0"
+            >
+              Campus Shops
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -168,6 +182,7 @@ export function LandingPage() {
           </section>
         )}
       </main>
+      <AppFooter />
     </div>
   );
 }

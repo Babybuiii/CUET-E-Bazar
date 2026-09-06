@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
 import { API_BASE_URL } from "@/lib/api";
+import {
+  auth,
+  getFirebaseAuth,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  isFirebaseConfigured
+} from "@/lib/firebase";
 
 const roles = [
   { id: "student", label: "Student" },
@@ -24,6 +31,47 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError("Please enter your email above to receive a password reset link.");
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+
+    const activeAuth = auth || (typeof window !== "undefined" ? getFirebaseAuth() : null);
+
+    if (!isFirebaseConfigured || !activeAuth) {
+      setError(
+        "Firebase is not loaded yet. If you recently updated .env.local, please restart your terminal with 'npm run dev' to load the keys."
+      );
+      return;
+    }
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      await sendPasswordResetEmail(activeAuth, cleanEmail);
+      setSuccess(
+        `Password reset email sent to ${cleanEmail}! Please check your Inbox and Spam/Junk folders.`
+      );
+      setResetSent(true);
+    } catch (err: any) {
+      console.error("Password reset error:", err);
+      if (err.code === "auth/user-not-found") {
+        setError(
+          `No account with email "${email.trim()}" exists in Firebase Authentication yet. Please create an account on the Sign Up page first.`
+        );
+      } else if (err.code === "auth/invalid-email") {
+        setError("Please enter a valid email address.");
+      } else if (err.code === "auth/too-many-requests") {
+        setError("Too many reset requests sent. Please check your inbox or wait a few minutes.");
+      } else {
+        setError(err.message || "Failed to send password reset email.");
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,10 +79,34 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const normalizedEmail = email.trim().toLowerCase();
+      let firebaseUid: string | undefined = undefined;
+
+      // ── Optional Firebase Email Sign In ──
+      if (isFirebaseConfigured && auth) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+          firebaseUid = userCredential.user.uid;
+        } catch (fbErr: any) {
+          if (fbErr.code === "auth/invalid-credential" || fbErr.code === "auth/wrong-password" || fbErr.code === "auth/user-not-found") {
+            // Note: If user was created before Firebase, fallback to checking MongoDB
+            console.log("Firebase credentials check:", fbErr.message);
+          } else {
+            console.warn("Firebase sign in notice:", fbErr.message);
+          }
+        }
+      }
+
+      // ── Authenticate with Backend ──
+      const endpoint = firebaseUid ? `${API_BASE_URL}/api/auth/firebase-sync` : `${API_BASE_URL}/api/auth/login`;
+      const body = firebaseUid
+        ? { firebaseUid, email: normalizedEmail, role: selectedRole }
+        : { email: normalizedEmail, password };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+        body: JSON.stringify(body)
       });
 
       const data = await res.json();
@@ -46,11 +118,12 @@ export default function LoginPage() {
       if (data.token) {
         localStorage.setItem("cuet_ebazar_token", data.token);
         localStorage.setItem("cuet_ebazar_user", JSON.stringify(data.user));
+        window.dispatchEvent(new Event("auth-changed"));
       }
 
       setSuccess("Logged in successfully! Redirecting...");
       setTimeout(() => {
-        router.push("/home");
+        router.push(data.user?.role === "shop_owner" ? "/dashboard" : "/home");
       }, 1000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to log in.";
@@ -138,9 +211,13 @@ export default function LoginPage() {
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" className="rounded" /> Remember Me
                 </label>
-                <Link href="#" className="text-brand-emerald font-semibold hover:underline">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-brand-emerald font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
+                >
                   Forgot Password?
-                </Link>
+                </button>
               </div>
 
               <Button className="w-full" type="submit" disabled={loading}>
