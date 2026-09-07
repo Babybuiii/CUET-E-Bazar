@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
@@ -46,7 +46,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#eaeded] dark:bg-brand-charcoal">
       {/* ── Permanent Sticky Header & Navigation Topbar ── */}
       <div className="sticky top-0 z-40 w-full shadow-md">
-        <AppHeader />
+        <Suspense fallback={<div className="h-14 bg-[#131921]" />}>
+          <AppHeader />
+        </Suspense>
         <nav
           aria-label="Main sub navigation"
           className="border-b border-[#37475a] bg-[#232f3e] px-2 py-1 text-sm text-white sm:px-5 lg:px-8"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Bell, LogOut, MessageCircle, PlusCircle, Search, X } from "lucide-react";
@@ -9,19 +9,17 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { useAuth } from "@/lib/auth";
 
-export function AppHeader() {
-  const [isSellOpen, setIsSellOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+function HeaderSearchBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isLoggedIn, logout } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Sync input value if URL already has search query
   useEffect(() => {
     const q = searchParams.get("search");
     if (q) {
       setSearchTerm(q);
-    } else if (q === null && window.location.pathname === "/marketplace") {
+    } else if (q === null && typeof window !== "undefined" && window.location.pathname === "/marketplace") {
       setSearchTerm("");
     }
   }, [searchParams]);
@@ -42,6 +40,62 @@ export function AppHeader() {
     }
   };
 
+  return (
+    <form
+      onSubmit={handleSearchSubmit}
+      className="focus-ring flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]"
+    >
+      <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
+      <input
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        aria-label="Search products"
+        placeholder="Search products, calculators, bicycles, books..."
+        className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
+      />
+      {searchTerm && (
+        <button
+          type="button"
+          onClick={handleClear}
+          aria-label="Clear search"
+          className="px-2 text-slate-400 hover:text-slate-600 transition"
+        >
+          <X size={16} />
+        </button>
+      )}
+      <button
+        type="submit"
+        className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111] hover:bg-[#f3a847] transition active:scale-95"
+        aria-label="Search"
+      >
+        <Search size={16} />
+      </button>
+    </form>
+  );
+}
+
+function HeaderSearchFallback() {
+  return (
+    <div className="flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]">
+      <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
+      <input
+        aria-label="Search products"
+        placeholder="Search products, calculators, bicycles, books..."
+        className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
+        disabled
+      />
+      <div className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111]">
+        <Search size={16} />
+      </div>
+    </div>
+  );
+}
+
+export function AppHeader() {
+  const [isSellOpen, setIsSellOpen] = useState(false);
+  const router = useRouter();
+  const { isLoggedIn, logout } = useAuth();
+
   const handleLogout = () => {
     logout();
     router.push("/");
@@ -57,36 +111,9 @@ export function AppHeader() {
             </div>
           </div>
 
-          <form
-            onSubmit={handleSearchSubmit}
-            className="focus-ring flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]"
-          >
-            <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search products"
-              placeholder="Search products, calculators, bicycles, books..."
-              className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={handleClear}
-                aria-label="Clear search"
-                className="px-2 text-slate-400 hover:text-slate-600 transition"
-              >
-                <X size={16} />
-              </button>
-            )}
-            <button
-              type="submit"
-              className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111] hover:bg-[#f3a847] transition active:scale-95"
-              aria-label="Search"
-            >
-              <Search size={16} />
-            </button>
-          </form>
+          <Suspense fallback={<HeaderSearchFallback />}>
+            <HeaderSearchBar />
+          </Suspense>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isLoggedIn ? (
