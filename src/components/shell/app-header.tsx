@@ -3,10 +3,11 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, LogOut, MessageCircle, PlusCircle, Search, X } from "lucide-react";
+import { LogOut, MessageCircle, PlusCircle, Search, X } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SellModal } from "@/components/marketplace/sell-modal";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { useAuth } from "@/lib/auth";
 
 function HeaderSearchBar() {
@@ -94,7 +95,8 @@ function HeaderSearchFallback() {
 export function AppHeader() {
   const [isSellOpen, setIsSellOpen] = useState(false);
   const router = useRouter();
-  const { isLoggedIn, logout } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
+  const isShopOwner = user?.role === "shop_owner";
 
   const handleLogout = () => {
     logout();
@@ -107,13 +109,17 @@ export function AppHeader() {
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70 shrink-0">
-              <Logo href={isLoggedIn ? "/home" : "/"} />
+              <Logo href={!isLoggedIn ? "/" : isShopOwner ? "/my-shop" : "/home"} />
             </div>
           </div>
 
-          <Suspense fallback={<HeaderSearchFallback />}>
-            <HeaderSearchBar />
-          </Suspense>
+          {isShopOwner ? (
+            <div className="flex-1" />
+          ) : (
+            <Suspense fallback={<HeaderSearchFallback />}>
+              <HeaderSearchBar />
+            </Suspense>
+          )}
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isLoggedIn ? (
@@ -127,9 +133,7 @@ export function AppHeader() {
                   <span className="hidden xs:inline sm:inline">Sell</span>
                 </button>
 
-                <button className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Notifications">
-                  <Bell size={17} />
-                </button>
+                <NotificationBell />
                 <Link href="/messages" className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Messages">
                   <MessageCircle size={17} />
                 </Link>

@@ -410,6 +410,7 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
       images,
       seller: req.user._id,
       shop: req.user.shop || null,
+      sellerType: req.user.role === 'shop_owner' && req.user.shop ? 'shop' : 'individual',
       isNegotiable: isNegotiable === 'true' || isNegotiable === true
     });
 

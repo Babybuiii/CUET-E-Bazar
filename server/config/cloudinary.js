@@ -77,9 +77,51 @@ const uploadAvatar = multer({
   }
 });
 
+// ── Shop branding storage (logo + cover banner) ───────────────────────────────
+// One multer instance handles both fields; Cloudinary crops each by field name.
+let shopStorage;
+
+if (isCloudinaryConfigured) {
+  shopStorage = new CloudinaryStorage({
+    cloudinary,
+    params: (req, file) => {
+      const isLogo = file.fieldname === 'logo';
+      return {
+        folder: isLogo ? 'ebazar/shops/logos' : 'ebazar/shops/banners',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'heic'],
+        transformation: isLogo
+          ? [
+              { width: 400, height: 400, crop: 'fill', gravity: 'auto' },
+              { quality: 'auto:good' },
+              { fetch_format: 'auto' }
+            ]
+          : [
+              { width: 1600, height: 400, crop: 'fill', gravity: 'auto' },
+              { quality: 'auto:good' },
+              { fetch_format: 'auto' }
+            ]
+      };
+    }
+  });
+} else {
+  shopStorage = multer.memoryStorage();
+}
+
+const uploadShopImages = multer({
+  storage: shopStorage,
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files (JPG, PNG, WebP) are allowed.'), false);
+    }
+    cb(null, true);
+  }
+});
+
 module.exports = {
   cloudinary,
   upload,
   uploadAvatar,
+  uploadShopImages,
   isCloudinaryConfigured
 };

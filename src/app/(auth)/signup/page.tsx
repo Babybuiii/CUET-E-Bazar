@@ -8,6 +8,7 @@ import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, Sparkles, Store, Use
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
+import { ShopImagePicker } from "@/components/shops/shop-image-picker";
 import { CUET_DEPARTMENTS, CUET_HALLS } from "@/data/mock";
 import { API_BASE_URL } from "@/lib/api";
 import {
@@ -62,6 +63,11 @@ export default function SignupPage() {
     password: "",
     confirmPassword: ""
   });
+
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -206,6 +212,28 @@ export default function SignupPage() {
         localStorage.setItem("cuet_ebazar_token", data.token);
         localStorage.setItem("cuet_ebazar_user", JSON.stringify(data.user));
         window.dispatchEvent(new Event("auth-changed"));
+      }
+
+      // Shop branding is optional, so upload it after the account exists.
+      // A failure here must not undo a successful registration.
+      if (role === "shop_owner" && data.token && (logoFile || bannerFile)) {
+        try {
+          const imageData = new FormData();
+          if (logoFile) imageData.append("logo", logoFile);
+          if (bannerFile) imageData.append("banner", bannerFile);
+
+          const imgRes = await fetch(`${API_BASE_URL}/api/shops/my-shop/images`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${data.token}` },
+            body: imageData
+          });
+          const imgData = await imgRes.json().catch(() => null);
+          if (!imgRes.ok || !imgData?.success) {
+            console.warn("Shop image upload skipped:", imgData?.message || `HTTP ${imgRes.status}`);
+          }
+        } catch (imgErr) {
+          console.warn("Shop image upload failed:", imgErr);
+        }
       }
 
       setSuccessMsg(
@@ -544,6 +572,48 @@ export default function SignupPage() {
                         className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
                       />
                     </label>
+                  </div>
+
+                  {/* Shop branding - both optional, uploaded right after signup */}
+                  <div className="sm:col-span-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 dark:border-slate-700 dark:bg-slate-900/40">
+                      <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+                        Shop Branding{" "}
+                        <span className="font-normal text-slate-400">— optional, you can add these later</span>
+                      </p>
+                      <div className="flex flex-col gap-4 sm:flex-row">
+                        <div className="shrink-0">
+                          <ShopImagePicker
+                            kind="logo"
+                            previewUrl={logoPreview}
+                            onSelect={(f) => {
+                              setLogoFile(f);
+                              setLogoPreview(URL.createObjectURL(f));
+                            }}
+                            onRemove={() => {
+                              setLogoFile(null);
+                              setLogoPreview("");
+                            }}
+                            onError={setError}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <ShopImagePicker
+                            kind="banner"
+                            previewUrl={bannerPreview}
+                            onSelect={(f) => {
+                              setBannerFile(f);
+                              setBannerPreview(URL.createObjectURL(f));
+                            }}
+                            onRemove={() => {
+                              setBannerFile(null);
+                              setBannerPreview("");
+                            }}
+                            onError={setError}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Operating Hours */}

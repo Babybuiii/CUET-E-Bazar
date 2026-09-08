@@ -5,6 +5,10 @@ const mongoose = require('mongoose');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const messageRoutes = require('./routes/messages');
+const shopRoutes = require('./routes/shops');
+const notificationRoutes = require('./routes/notifications');
+const orderRoutes = require('./routes/orders');
+const queryRoutes = require('./routes/queries');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,6 +25,10 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/shops', shopRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/queries', queryRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
