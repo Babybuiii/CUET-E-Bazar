@@ -36,6 +36,7 @@ function MarketplaceContent() {
       setLoading(true);
       const params = new URLSearchParams();
       params.set("sort", "newest");
+      params.set("sellerType", "individual");
       if (category && category !== "All") {
         params.set("category", category);
       }
@@ -45,7 +46,16 @@ function MarketplaceContent() {
       const res = await fetch(`${API_BASE_URL}/api/products?${params.toString()}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {
-        setProducts(data.products);
+        // Strictly individual sellers: exclude campus shops and giveaways
+        const individualProducts = data.products.filter((p: any) => {
+          if (p.shop) return false;
+          if (p.sellerType === "shop") return false;
+          if (p.seller && (p.seller.role === "shop_owner" || p.seller.shop)) return false;
+          if (Number(p.price) <= 0) return false;
+          if (p.category && p.category.toLowerCase().includes("giveaway")) return false;
+          return true;
+        });
+        setProducts(individualProducts);
       } else {
         setProducts([]);
       }
@@ -70,7 +80,7 @@ function MarketplaceContent() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <PageHeader
           title="CUET Marketplace"
-          description="Browse verified listings posted by students and campus sellers."
+          description="Browse verified listings posted by individual student sellers across campus (excluding campus shops and free giveaways)."
         />
         <Button
           onClick={() => setIsSellOpen(true)}

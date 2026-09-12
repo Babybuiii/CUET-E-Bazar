@@ -13,17 +13,14 @@ type AppSidebarProps = {
   onToggle: () => void;
 };
 
+import { clearAuthSession } from "@/lib/auth";
+
 export function AppSidebar({ open, onToggle }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem("cuet_ebazar_token");
-      localStorage.removeItem("cuet_ebazar_user");
-    } catch {
-      // ignore
-    }
+    clearAuthSession();
     router.push("/login");
   };
 

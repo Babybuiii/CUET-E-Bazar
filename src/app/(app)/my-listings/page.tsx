@@ -19,7 +19,9 @@ import {
   Sparkles,
   LogIn,
   RefreshCw,
-  Archive
+  Archive,
+  Eye,
+  Users
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
@@ -49,6 +51,7 @@ type ProductListing = {
   tags: string[];
   images: (ProductImage | string)[];
   viewsCount?: number;
+  uniqueViewsCount?: number;
   isNegotiable?: boolean;
   createdAt: string;
 };
@@ -385,6 +388,17 @@ export default function MyListingsPage() {
                         }`}
                       >
                         {item.status}
+                      </span>
+
+                      {/* Ad Clicks & Unique Users Badge */}
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200/50">
+                        <span className="inline-flex items-center gap-0.5">
+                          <Eye size={11} /> {item.viewsCount || 0} clicks
+                        </span>
+                        <span className="text-blue-300 dark:text-blue-700">•</span>
+                        <span className="inline-flex items-center gap-0.5">
+                          <Users size={11} /> {item.uniqueViewsCount ?? ((item.viewsCount || 0) > 0 ? 1 : 0)} unique
+                        </span>
                       </span>
                     </div>
 

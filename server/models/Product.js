@@ -151,6 +151,17 @@ const productSchema = new mongoose.Schema(
       default: 0
     },
 
+    uniqueViewers: [
+      {
+        type: String
+      }
+    ],
+
+    uniqueViewsCount: {
+      type: Number,
+      default: 0
+    },
+
     queryCount: {
       type: Number,
       default: 0

@@ -58,6 +58,14 @@ router.post('/register', async (req, res) => {
       operatingHours
     } = req.body;
 
+    // ── Block admin self-registration ──────────────────────────────────────
+    if (role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin accounts cannot be created through registration. Contact the system administrator.'
+      });
+    }
+
     const userRole = role === 'shop_owner' ? 'shop_owner' : 'student';
 
     // ── Common required fields check ──────────────────────────────────────────
@@ -187,7 +195,7 @@ router.post('/register', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role: requestedRole } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
@@ -208,6 +216,16 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    // ── Portal role validation ────────────────────────────────────────────
+    // If the frontend sends a specific role (from a dedicated portal), verify it matches
+    if (requestedRole && user.role !== requestedRole) {
+      const portalNames = { student: 'Student', shop_owner: 'Shop Owner', admin: 'Admin' };
+      return res.status(403).json({
+        success: false,
+        message: `This account is registered as "${portalNames[user.role] || user.role}". Please use the correct login portal.`
+      });
     }
 
     // Update last active

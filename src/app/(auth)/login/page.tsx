@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,15 +17,8 @@ import {
   isFirebaseConfigured
 } from "@/lib/firebase";
 
-const roles = [
-  { id: "student", label: "Student" },
-  { id: "shop_owner", label: "Shop Owner" },
-  { id: "admin", label: "Admin" }
-] as const;
-
 export default function LoginPage() {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<string>("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +82,6 @@ export default function LoginPage() {
           firebaseUid = userCredential.user.uid;
         } catch (fbErr: any) {
           if (fbErr.code === "auth/invalid-credential" || fbErr.code === "auth/wrong-password" || fbErr.code === "auth/user-not-found") {
-            // Note: If user was created before Firebase, fallback to checking MongoDB
             console.log("Firebase credentials check:", fbErr.message);
           } else {
             console.warn("Firebase sign in notice:", fbErr.message);
@@ -97,11 +89,11 @@ export default function LoginPage() {
         }
       }
 
-      // ── Authenticate with Backend ──
+      // ── Authenticate with Backend (student role enforced) ──
       const endpoint = firebaseUid ? `${API_BASE_URL}/api/auth/firebase-sync` : `${API_BASE_URL}/api/auth/login`;
       const body = firebaseUid
-        ? { firebaseUid, email: normalizedEmail, role: selectedRole }
-        : { email: normalizedEmail, password };
+        ? { firebaseUid, email: normalizedEmail, role: "student" }
+        : { email: normalizedEmail, password, role: "student" };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -123,7 +115,7 @@ export default function LoginPage() {
 
       setSuccess("Logged in successfully! Redirecting...");
       setTimeout(() => {
-        router.push(data.user?.role === "shop_owner" ? "/dashboard" : "/home");
+        router.push("/home");
       }, 1000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to log in.";
@@ -138,27 +130,10 @@ export default function LoginPage() {
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
         <Card className="glass p-6 sm:p-8">
           <Logo href="/" />
-          <h1 className="mt-6 font-display text-2xl sm:text-3xl font-bold">Welcome Back</h1>
+          <h1 className="mt-6 font-display text-2xl sm:text-3xl font-bold">Student Login</h1>
           <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-            Sign in with your CUET email and credentials.
+            Sign in with your CUET student email and password.
           </p>
-
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {roles.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setSelectedRole(r.id)}
-                className={`focus-ring rounded-lg px-2.5 py-2 text-xs font-semibold transition text-center ${
-                  selectedRole === r.id
-                    ? "bg-brand-emerald text-white shadow-sm"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
 
           {error && (
             <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs sm:text-sm text-rose-600 dark:text-rose-400">
@@ -174,64 +149,55 @@ export default function LoginPage() {
             </div>
           )}
 
-          <AnimatePresence mode="wait">
-            <motion.form
-              key={selectedRole}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              onSubmit={handleSubmit}
-              className="mt-6 space-y-4"
-            >
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                CUET Email *
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="u2204120@student.cuet.ac.bd"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                  required
-                />
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+              CUET Email *
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="u2204120@student.cuet.ac.bd"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                required
+              />
+            </label>
+
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Password *
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                required
+              />
+            </label>
+
+            <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" className="rounded" /> Remember Me
               </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-brand-emerald font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
+              >
+                Forgot Password?
+              </button>
+            </div>
 
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Password *
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                  required
-                />
-              </label>
-
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="rounded" /> Remember Me
-                </label>
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-brand-emerald font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-
-              <Button className="w-full" type="submit" disabled={loading}>
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" />
-                    Signing in...
-                  </span>
-                ) : (
-                  `Login as ${roles.find((r) => r.id === selectedRole)?.label}`
-                )}
-              </Button>
-            </motion.form>
-          </AnimatePresence>
+            <Button className="w-full" type="submit" disabled={loading}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Signing in...
+                </span>
+              ) : (
+                "Login as Student"
+              )}
+            </Button>
+          </form>
 
           <p className="mt-6 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-300">
             New here?{" "}
@@ -257,7 +223,7 @@ export default function LoginPage() {
             </div>
             <div className="rounded-2xl bg-white/80 p-4 shadow-sm dark:bg-slate-900/70">
               <p className="font-semibold text-sm">Campus Shops</p>
-              <p className="text-xs text-slate-500 mt-1">Shop analytics, inventory & direct orders</p>
+              <p className="text-xs text-slate-500 mt-1">Order from registered campus stores directly</p>
             </div>
             <div className="rounded-2xl bg-white/80 p-4 shadow-sm dark:bg-slate-900/70">
               <p className="font-semibold text-sm">Giveaway Network</p>
@@ -273,4 +239,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
