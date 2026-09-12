@@ -198,10 +198,10 @@ export function MobileNavSidebar({ isOpen, onClose }: MobileNavSidebarProps) {
           {isLoggedIn && (
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-600 hover:text-white transition active:scale-95"
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/15 py-2.5 text-sm font-bold text-rose-300 hover:bg-rose-600 hover:text-white transition active:scale-95 cursor-pointer shadow-sm"
             >
-              <LogOut size={15} />
-              <span>Logout</span>
+              <LogOut size={16} />
+              <span>Log Out</span>
             </button>
           )}
         </div>

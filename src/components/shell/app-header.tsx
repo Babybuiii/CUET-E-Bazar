@@ -11,7 +11,7 @@ import { CartDrawer } from "@/components/cart/cart-drawer";
 import { fetchCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 
-function HeaderSearchBar() {
+function HeaderSearchBar({ className = "" }: { className?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
@@ -45,49 +45,55 @@ function HeaderSearchBar() {
   return (
     <form
       onSubmit={handleSearchSubmit}
-      className="focus-ring flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]"
+      className={`focus-ring flex items-center overflow-hidden rounded-md bg-white text-[#0f1111] ${
+        className || "flex-1 max-w-xl mx-auto"
+      }`}
     >
       <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
       <input
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         aria-label="Search products"
-        placeholder="Search products, calculators, bicycles, books..."
-        className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
+        placeholder="Search products..."
+        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent"
       />
       {searchTerm && (
         <button
           type="button"
           onClick={handleClear}
           aria-label="Clear search"
-          className="px-2 text-slate-400 hover:text-slate-600 transition"
+          className="px-1.5 text-slate-400 hover:text-slate-600 transition shrink-0"
         >
-          <X size={16} />
+          <X size={14} />
         </button>
       )}
       <button
         type="submit"
-        className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111] hover:bg-[#f3a847] transition active:scale-95"
+        className="h-full bg-[#febd69] px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[#0f1111] hover:bg-[#f3a847] transition active:scale-95 shrink-0 flex items-center justify-center"
         aria-label="Search"
       >
-        <Search size={16} />
+        <Search size={15} />
       </button>
     </form>
   );
 }
 
-function HeaderSearchFallback() {
+function HeaderSearchFallback({ className = "" }: { className?: string }) {
   return (
-    <div className="flex flex-1 max-w-xl mx-auto items-center overflow-hidden rounded-md bg-white text-[#0f1111]">
+    <div
+      className={`flex items-center overflow-hidden rounded-md bg-white text-[#0f1111] ${
+        className || "flex-1 max-w-xl mx-auto"
+      }`}
+    >
       <span className="hidden bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 sm:inline">All</span>
       <input
         aria-label="Search products"
-        placeholder="Search products, calculators, bicycles, books..."
-        className="w-full border-0 px-3 py-1.5 text-sm outline-none bg-transparent"
+        placeholder="Search products..."
+        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent"
         disabled
       />
-      <div className="h-full bg-[#febd69] px-3.5 py-2 text-[#0f1111]">
-        <Search size={16} />
+      <div className="h-full bg-[#febd69] px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[#0f1111] shrink-0 flex items-center justify-center">
+        <Search size={15} />
       </div>
     </div>
   );
@@ -145,88 +151,65 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
   return (
     <>
       <header className="bg-[#131921] px-3 py-2 text-white shadow-sm sm:px-5 lg:px-8">
-        {/* ── Mobile Header Layout (md:hidden) ── */}
-        <div className="flex flex-col gap-2 md:hidden">
-          {/* Top Row: Logo & Action Buttons (All exactly same h-9 w-9 size) */}
-          <div className="flex items-center justify-between gap-1.5">
-            {/* Left: Sidebar Menu Toggle & Logo Only */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onOpenSidebar}
-                className="h-9 w-9 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition shrink-0"
-                aria-label="Open navigation menu"
-                title="Menu"
-              >
-                <Menu size={19} />
-              </button>
-              <div className="shrink-0 flex items-center">
-                <Logo href={isLoggedIn ? "/home" : "/"} iconOnly />
-              </div>
-            </div>
-
-            {/* Right: Messages, Cart, Dark mode toggle, Logout - ALL SAME SIZE */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Messages button */}
-              <Link
-                href={isLoggedIn ? "/messages" : "/login?redirect=messages"}
-                className="h-9 w-9 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
-                aria-label="Messages"
-                title="Messages"
-              >
-                <MessageCircle size={18} />
-              </Link>
-
-              {/* Cart button */}
-              <button
-                type="button"
-                onClick={() => setIsCartOpen(true)}
-                className="h-9 w-9 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
-                aria-label="Shopping Cart"
-                title="Shopping Cart"
-              >
-                <ShoppingBag size={18} />
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#febd69] px-1 text-[10px] font-extrabold text-[#0f1111] shadow-sm">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Dark mode toggle */}
-              <ThemeToggle
-                className="h-9 w-9 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition shrink-0"
-                size={18}
-              />
-
-              {/* Logout / Login button */}
-              {isLoggedIn ? (
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="h-9 w-9 rounded-lg flex items-center justify-center text-rose-300 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-600 hover:text-white active:scale-95 transition shrink-0"
-                  title="Logout"
-                  aria-label="Logout"
-                >
-                  <LogOut size={16} />
-                </button>
-              ) : (
-                <Link
-                  href="/login"
-                  className="h-9 w-9 rounded-lg flex items-center justify-center text-white bg-brand-emerald hover:bg-[#0d665f] active:scale-95 transition shrink-0 shadow-sm"
-                  title="Sign In"
-                  aria-label="Sign In"
-                >
-                  <LogIn size={16} />
-                </Link>
-              )}
+        {/* ── Mobile Header Layout: ALL IN ONE SINGLE LINE (md:hidden) ── */}
+        <div className="flex md:hidden items-center justify-between gap-1.5 w-full">
+          {/* Left: Sidebar Menu Toggle & Logo Only */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenSidebar}
+              className="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition shrink-0"
+              aria-label="Open navigation menu"
+              title="Menu"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="shrink-0 flex items-center">
+              <Logo href={isLoggedIn ? "/home" : "/"} iconOnly />
             </div>
           </div>
 
-          {/* Bottom Row: Searchbar spanning full width on Mobile */}
-          <Suspense fallback={<HeaderSearchFallback />}>
-            <HeaderSearchBar />
-          </Suspense>
+          {/* Center: Searchbar taking remaining flexible space */}
+          <div className="flex-1 min-w-0 mx-0.5">
+            <Suspense fallback={<HeaderSearchFallback className="w-full h-8.5" />}>
+              <HeaderSearchBar className="w-full h-8.5" />
+            </Suspense>
+          </div>
+
+          {/* Right: Messages, Cart, Dark mode toggle - EXACT SAME SIZE (h-8.5 w-8.5) & NO Logout button (Moved to Sidebar) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Messages button */}
+            <Link
+              href={isLoggedIn ? "/messages" : "/login?redirect=messages"}
+              className="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
+              aria-label="Messages"
+              title="Messages"
+            >
+              <MessageCircle size={17} />
+            </Link>
+
+            {/* Cart button */}
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              className="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
+              aria-label="Shopping Cart"
+              title="Shopping Cart"
+            >
+              <ShoppingBag size={17} />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#febd69] px-1 text-[10px] font-extrabold text-[#0f1111] shadow-sm">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
+            {/* Dark mode toggle */}
+            <ThemeToggle
+              className="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition shrink-0"
+              size={17}
+            />
+          </div>
         </div>
 
         {/* ── Desktop Header Layout (hidden md:flex) - UNCHANGED ── */}
