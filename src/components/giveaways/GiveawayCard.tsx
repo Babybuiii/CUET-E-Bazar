@@ -101,7 +101,7 @@ export function GiveawayCard({
   const sc = statusConfig[giveaway.status] ?? statusConfig.available;
 
   // ── Action button ─────────────────────────────────────────────────────────
-  function ActionButton() {
+  function renderActionButton() {
     // 1. Available giveaway — not donor's: "Claim Item"
     if (giveaway.status === "available" && !isOwnGiveaway) {
       return (
@@ -341,7 +341,7 @@ export function GiveawayCard({
 
           {/* Action button pinned to bottom */}
           <div className="mt-auto pt-2">
-            <ActionButton />
+            {renderActionButton()}
           </div>
         </div>
       </Card>
