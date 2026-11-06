@@ -138,7 +138,8 @@ router.post('/register', async (req, res) => {
       role: userRole,
       studentId: userRole === 'student' ? studentId.trim() : undefined,
       department: userRole === 'student' ? department : '',
-      hall: userRole === 'student' ? hall : ''
+      hall: userRole === 'student' ? hall : '',
+      isVerified: userRole === 'student' || userRole === 'admin'
     });
 
     // ── If Shop Owner, create the Shop document and link it ───────────────────
@@ -210,8 +211,11 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    // Update last active
+    // Update last active and auto-verify student / admin if not yet verified
     user.lastActive = new Date();
+    if ((user.role === 'student' || user.role === 'admin') && !user.isVerified) {
+      user.isVerified = true;
+    }
     await user.save();
 
     const token = jwt.sign(
@@ -278,6 +282,9 @@ router.post('/firebase-sync', async (req, res) => {
           message: `Your account has been banned. Reason: ${user.banReason || 'Contact admin for details.'}`
         });
       }
+      if ((user.role === 'student' || user.role === 'admin') && !user.isVerified) {
+        user.isVerified = true;
+      }
       user.lastActive = new Date();
       await user.save();
     } else {
@@ -300,7 +307,8 @@ router.post('/firebase-sync', async (req, res) => {
         contactNumber: contactNumber.trim(),
         studentId: userRole === 'student' ? (studentId ? studentId.trim() : undefined) : undefined,
         department: userRole === 'student' ? department : '',
-        hall: userRole === 'student' ? hall : ''
+        hall: userRole === 'student' ? hall : '',
+        isVerified: userRole === 'student' || userRole === 'admin'
       });
 
       if (userRole === 'shop_owner' && shopName) {
@@ -348,8 +356,16 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     const Product = require('../models/Product');
     const actualSold = await Product.countDocuments({ seller: req.user._id, status: 'sold' });
+    let userModified = false;
     if (req.user.totalProductsSold !== actualSold) {
       req.user.totalProductsSold = actualSold;
+      userModified = true;
+    }
+    if ((req.user.role === 'student' || req.user.role === 'admin') && !req.user.isVerified) {
+      req.user.isVerified = true;
+      userModified = true;
+    }
+    if (userModified) {
       await req.user.save();
     }
   } catch (err) {
