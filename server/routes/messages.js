@@ -15,6 +15,7 @@ router.get('/conversations', authenticate, async (req, res) => {
     })
       .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
       .populate('product', 'title price images status condition location')
+      .populate('giveaway', 'title images condition location pickupSpot status')
       .sort({ updatedAt: -1, 'lastMessage.sentAt': -1 });
 
     return res.json({
@@ -135,7 +136,8 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 
     const conversation = await Conversation.findById(conversationId)
       .populate('participants', 'fullName userId department hall avatarUrl isVerified rating role')
-      .populate('product', 'title price images status condition location');
+      .populate('product', 'title price images status condition location')
+      .populate('giveaway', 'title images condition location pickupSpot status');
 
     if (!conversation) {
       return res.status(404).json({ success: false, message: 'Conversation not found.' });

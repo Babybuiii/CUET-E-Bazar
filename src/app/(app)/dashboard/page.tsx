@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   Package,
   TrendingUp,
@@ -16,13 +17,18 @@ import {
   LogIn,
   RefreshCw,
   Heart,
-  Users
+  Users,
+  Gift,
+  MapPin,
+  Clock,
+  User
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { API_BASE_URL } from "@/lib/api";
+import type { Giveaway } from "@/types/giveaway";
 
 type ProductAnalytics = {
   _id: string;
@@ -66,6 +72,7 @@ type UserProfile = {
 };
 
 export default function SellerDashboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics>({
     totalListings: 0,
@@ -81,6 +88,7 @@ export default function SellerDashboardPage() {
     clickToSaveRate: "0.0"
   });
   const [products, setProducts] = useState<ProductAnalytics[]>([]);
+  const [claimedGiveaways, setClaimedGiveaways] = useState<Giveaway[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSellOpen, setIsSellOpen] = useState(false);
@@ -105,6 +113,21 @@ export default function SellerDashboardPage() {
         } catch {
           // ignore parsing error
         }
+      }
+
+      // Fetch claimed giveaways in parallel
+      try {
+        const claimsRes = await fetch(`${API_BASE_URL}/api/giveaways/my-claims`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (claimsRes.ok) {
+          const claimsData = await claimsRes.json();
+          if (claimsData.success && Array.isArray(claimsData.giveaways)) {
+            setClaimedGiveaways(claimsData.giveaways);
+          }
+        }
+      } catch (claimErr) {
+        console.warn("Failed to load user's claimed giveaways:", claimErr);
       }
 
       // Fetch comprehensive seller analytics
@@ -396,6 +419,146 @@ export default function SellerDashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* ── My Claimed Items (Giveaways) ── */}
+      <Card className="p-4 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0f766e]/10 text-[#0f766e]">
+              <Gift size={20} />
+            </div>
+            <div>
+              <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                My Claimed Items
+                <span className="rounded-full bg-[#0f766e]/10 text-[#0f766e] px-2.5 py-0.5 text-xs font-semibold">
+                  {claimedGiveaways.length} {claimedGiveaways.length === 1 ? "item" : "items"}
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                100% free giveaway items you have claimed. Coordinate campus pickup with donors.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/giveaways"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0f766e] hover:underline"
+          >
+            Browse Giveaways <ArrowRight size={13} />
+          </Link>
+        </div>
+
+        {claimedGiveaways.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
+              <Gift size={22} />
+            </div>
+            <h3 className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-200">No Claimed Items Yet</h3>
+            <p className="mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
+              When you claim free textbooks, tools, or notes from peers, they will appear here.
+            </p>
+            <Link href="/giveaways" className="mt-3">
+              <Button variant="secondary" className="text-xs py-1.5 px-3">
+                Explore Available Giveaways
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {claimedGiveaways.map((giveaway) => {
+              const displayImg = giveaway.images?.[0] || null;
+              const claimDate = giveaway.claimedAt || giveaway.updatedAt;
+              const formattedDate = claimDate
+                ? new Date(claimDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric"
+                  })
+                : "Recently";
+
+              return (
+                <div
+                  key={giveaway._id}
+                  className="flex flex-col justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3.5 shadow-sm hover:border-[#0f766e]/40 transition space-y-3"
+                >
+                  <div className="space-y-2.5">
+                    {/* Image & Status Row */}
+                    <div className="flex items-start gap-3">
+                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        {displayImg ? (
+                          <Image
+                            src={displayImg}
+                            alt={giveaway.title}
+                            fill
+                            className="object-cover"
+                            unoptimized={displayImg.includes("cloudinary.com") || displayImg.startsWith("data:")}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-slate-300">
+                            <Gift size={22} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-block rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                            Claimed
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {formattedDate}
+                          </span>
+                        </div>
+                        <h4 className="mt-1 line-clamp-1 text-sm font-bold text-slate-900 dark:text-white" title={giveaway.title}>
+                          {giveaway.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {giveaway.category} • {giveaway.condition}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Donor Details */}
+                    <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                          {giveaway.donor?.avatarUrl ? (
+                            <Image
+                              src={giveaway.donor.avatarUrl}
+                              alt={giveaway.donor.fullName}
+                              width={20}
+                              height={20}
+                              className="rounded-full object-cover"
+                            />
+                          ) : (
+                            <User size={10} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            Donor: {giveaway.donor?.fullName || "CUET Member"}
+                          </p>
+                          {giveaway.donor?.department && (
+                            <p className="truncate text-[10px] text-slate-400">
+                              {giveaway.donor.department}{giveaway.donor.hall ? ` • ${giveaway.donor.hall}` : ""}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                        <MapPin size={11} className="shrink-0 text-slate-400" />
+                        <span className="truncate">
+                          {giveaway.location}{giveaway.pickupSpot ? ` — ${giveaway.pickupSpot}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {/* ── Detailed Listing Analytics Table ── */}
       <Card className="p-6">

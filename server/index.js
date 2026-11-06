@@ -15,8 +15,9 @@ const messageRoutes  = require('./routes/messages');
 const shopRoutes     = require('./routes/shops');
 const queryRoutes    = require('./routes/queries');
 const cartRoutes     = require('./routes/cart');
-const orderRoutes    = require('./routes/orders');
-const giveawayRoutes = require('./routes/giveaways');
+const orderRoutes        = require('./routes/orders');
+const giveawayRoutes     = require('./routes/giveaways');
+const notificationRoutes = require('./routes/notifications');
 
 const { startGiveawayScheduler } = require('./jobs/giveawayScheduler');
 
@@ -39,8 +40,9 @@ app.use('/api/messages',  messageRoutes);
 app.use('/api/shops',     shopRoutes);
 app.use('/api/queries',   queryRoutes);
 app.use('/api/cart',      cartRoutes);
-app.use('/api/orders',    orderRoutes);
-app.use('/api/giveaways', giveawayRoutes);
+app.use('/api/orders',        orderRoutes);
+app.use('/api/giveaways',     giveawayRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

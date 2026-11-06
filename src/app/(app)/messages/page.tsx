@@ -17,7 +17,8 @@ import {
   LogIn,
   RefreshCw,
   AlertCircle,
-  UserCheck
+  UserCheck,
+  Gift
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,14 @@ type AttachedProduct = {
   location?: string;
 };
 
+type AttachedGiveaway = {
+  _id?: string;
+  title: string;
+  image?: string;
+  location?: string;
+  pickupSpot?: string;
+};
+
 type ChatMessage = {
   id: string;
   senderId: string;
@@ -56,6 +65,7 @@ type ConversationItem = {
   id: string;
   participant: Participant;
   product?: AttachedProduct;
+  giveaway?: AttachedGiveaway;
   lastMessage: string;
   timestamp: string;
   unreadCount?: number;
@@ -65,7 +75,8 @@ function MessagesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Query params passed from "Chat with Seller"
+  // Query params passed from "Chat with Seller" or "Message Donor / Claimant"
+  const conversationId = searchParams.get("conversationId") || "";
   const sellerId = searchParams.get("sellerId") || "";
   const sellerName = searchParams.get("sellerName") || "";
   const productId = searchParams.get("productId") || "";
@@ -168,6 +179,9 @@ function MessagesContent() {
           const firstImg = c.product?.images?.[0];
           const pImg = typeof firstImg === "object" ? firstImg?.thumbnailUrl || firstImg?.url : firstImg;
 
+          const firstGImg = c.giveaway?.images?.[0];
+          const gImg = typeof firstGImg === "object" ? firstGImg?.url : firstGImg;
+
           return {
             id: c._id,
             participant: {
@@ -183,6 +197,15 @@ function MessagesContent() {
                   title: c.product.title,
                   price: c.product.price,
                   image: pImg || ""
+                }
+              : undefined,
+            giveaway: c.giveaway
+              ? {
+                  _id: c.giveaway._id,
+                  title: c.giveaway.title,
+                  image: gImg || "",
+                  location: c.giveaway.location,
+                  pickupSpot: c.giveaway.pickupSpot
                 }
               : undefined,
             lastMessage: c.lastMessage?.text || "No messages yet",
@@ -265,6 +288,16 @@ function MessagesContent() {
     const init = async () => {
       setLoading(true);
 
+      // 0. If conversationId is passed in query params (e.g. from Giveaways), select and load that conversation
+      if (conversationId && !hasInitializedFromQuery.current) {
+        hasInitializedFromQuery.current = true;
+        setActiveChatId(conversationId);
+        setIsMobileChatOpen(true);
+        await fetchConversations(conversationId);
+        await fetchMessages(conversationId);
+        return;
+      }
+
       // 1. If sellerId is passed in query params, try starting or finding real conversation
       if (sellerId && !hasInitializedFromQuery.current) {
         hasInitializedFromQuery.current = true;
@@ -329,7 +362,7 @@ function MessagesContent() {
     return () => {
       isSubscribed = false;
     };
-  }, [sellerId, productId, fetchConversations, fetchMessages]);
+  }, [sellerId, productId, conversationId, fetchConversations, fetchMessages]);
 
   // Load messages whenever activeChatId changes (and poll for new messages)
   useEffect(() => {
@@ -588,6 +621,16 @@ function MessagesContent() {
                         </div>
                       )}
 
+                      {conv.giveaway && (
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-[#0f766e] mt-0.5 truncate">
+                          <Gift size={11} className="shrink-0 text-[#0f766e]" />
+                          <span className="truncate">{conv.giveaway.title}</span>
+                          <span className="text-[#0f766e] font-bold text-[9px] bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-full border border-emerald-500/20">
+                            FREE
+                          </span>
+                        </div>
+                      )}
+
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
                         {conv.lastMessage}
                       </p>
@@ -652,6 +695,18 @@ function MessagesContent() {
                     <ExternalLink size={11} />
                   </Link>
                 )}
+
+                {/* Direct Giveaway Link */}
+                {activeConv.giveaway?._id && (
+                  <Link
+                    href="/giveaways"
+                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-[#0f766e] hover:underline shrink-0 bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-500/20"
+                  >
+                    <span className="hidden sm:inline">View Giveaway</span>
+                    <span className="sm:hidden">Item</span>
+                    <ExternalLink size={11} />
+                  </Link>
+                )}
               </div>
 
               {/* Self listing alert banner if user opened chat on own ad */}
@@ -659,6 +714,29 @@ function MessagesContent() {
                 <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/40 px-3 sm:px-4 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2 shrink-0">
                   <AlertCircle size={14} className="shrink-0 text-amber-600" />
                   <span className="truncate">{selfChatNotice}</span>
+                </div>
+              )}
+
+              {/* Attached Giveaway Context Banner */}
+              {activeConv.giveaway && (
+                <div className="bg-emerald-50/90 dark:bg-emerald-950/40 border-b border-emerald-500/20 p-2 sm:p-2.5 px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-[#0f766e] shrink-0 border border-emerald-200">
+                      <Gift size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                        🎁 Giveaway: {activeConv.giveaway.title}
+                      </p>
+                      <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        Pickup: {activeConv.giveaway.location}{activeConv.giveaway.pickupSpot ? ` — ${activeConv.giveaway.pickupSpot}` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-[9px] sm:text-[10px] text-emerald-800 dark:text-emerald-300 font-extrabold px-2 py-0.5 bg-white/90 dark:bg-slate-900/90 rounded-full border border-emerald-300 shrink-0">
+                    100% FREE
+                  </span>
                 </div>
               )}
 

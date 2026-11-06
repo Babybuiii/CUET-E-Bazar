@@ -18,6 +18,7 @@ interface UseGiveawaysReturn {
   error: string | null;
   refetch: () => void;
   removeGiveaway: (id: string) => void;
+  updateGiveawayLocally: (giveaway: Giveaway) => void;
 }
 
 export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn {
@@ -27,6 +28,10 @@ export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn 
 
   const removeGiveaway = useCallback((id: string) => {
     setGiveaways(prev => prev.filter(g => g._id !== id));
+  }, []);
+
+  const updateGiveawayLocally = useCallback((updated: Giveaway) => {
+    setGiveaways(prev => prev.map(g => (g._id === updated._id ? { ...g, ...updated } : g)));
   }, []);
 
   const fetchGiveaways = useCallback(async () => {
@@ -57,7 +62,7 @@ export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn 
     return () => clearInterval(intervalId);
   }, [fetchGiveaways]);
 
-  return { giveaways, loading, error, refetch: fetchGiveaways, removeGiveaway };
+  return { giveaways, loading, error, refetch: fetchGiveaways, removeGiveaway, updateGiveawayLocally };
 }
 
 // ── Single giveaway fetcher ───────────────────────────────────────────────────
@@ -91,28 +96,89 @@ export async function createGiveaway(formData: FormData): Promise<{ success: boo
   }
 }
 
-// ── Claim a giveaway ──────────────────────────────────────────────────────────
-export async function claimGiveaway(id: string): Promise<{ success: boolean; message: string; claimBufferEndsAt?: string; status?: string }> {
-  const token = getAuthToken();
-  if (!token) return { success: false, message: "You must be logged in." };
+// ── Claim a giveaway (FCFS) ──────────────────────────────────────────────────
+export async function claimGiveaway(id: string): Promise<{ success: boolean; message: string; giveaway?: Giveaway; conversationId?: string }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "You must be logged in to claim a giveaway." };
 
-  const res  = await fetch(`${API_BASE_URL}/api/giveaways/${id}/claim`, {
-    method:  "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-  });
-  return res.json();
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}/claim`, {
+      method:  "POST",
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 401) return { success: false, message: "Session expired. Please log in again." };
+      return { success: false, message: data?.message || "Failed to claim giveaway." };
+    }
+
+    return {
+      success:        true,
+      message:        data?.message || "Item claimed successfully!",
+      giveaway:       data?.giveaway,
+      conversationId: data?.conversationId
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
 }
 
-// ── Initiate contact with donor ───────────────────────────────────────────────
-export async function initiateContact(id: string): Promise<{ success: boolean; message: string; conversationId?: string }> {
-  const token = getAuthToken();
-  if (!token) return { success: false, message: "You must be logged in." };
+// ── Fetch claimed giveaways for logged-in user ──────────────────────────────
+export async function fetchMyClaims(): Promise<{ success: boolean; giveaways: Giveaway[]; message?: string }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, giveaways: [], message: "Authentication required." };
 
-  const res  = await fetch(`${API_BASE_URL}/api/giveaways/${id}/contact`, {
-    method:  "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-  });
-  return res.json();
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/my-claims`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      return { success: false, giveaways: [], message: data?.message || "Failed to load claimed items." };
+    }
+
+    return {
+      success:   true,
+      giveaways: data.giveaways || data.claims || []
+    };
+  } catch (err: any) {
+    return { success: false, giveaways: [], message: err?.message || "Network error." };
+  }
+}
+
+// ── Open or initiate conversation between donor & claimant ───────────────────
+export async function initiateContact(id: string): Promise<{ success: boolean; message: string; conversationId?: string }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "You must be logged in to send messages." };
+
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}/contact`, {
+      method:  "POST",
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (res.status === 401) return { success: false, message: "Session expired. Please log in again." };
+      return { success: false, message: data?.message || "Failed to open conversation." };
+    }
+
+    return {
+      success:        true,
+      message:        data?.message || "Conversation opened.",
+      conversationId: data?.conversationId
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
 }
 
 // ── Cancel / Unpublish a giveaway ───────────────────────────────────────────

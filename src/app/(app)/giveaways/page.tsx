@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Gift,
@@ -17,7 +18,7 @@ import { GiveawayCard } from "@/components/giveaways/GiveawayCard";
 import { OfferGiveawayModal } from "@/components/giveaways/OfferGiveawayModal";
 import { ClaimConfirmationModal } from "@/components/giveaways/ClaimConfirmationModal";
 import { UnpublishConfirmationModal } from "@/components/giveaways/UnpublishConfirmationModal";
-import { useGiveaways } from "@/hooks/useGiveaways";
+import { useGiveaways, initiateContact } from "@/hooks/useGiveaways";
 import { useAuth } from "@/lib/auth";
 import {
   GIVEAWAY_CATEGORIES,
@@ -28,6 +29,7 @@ import {
 } from "@/types/giveaway";
 
 export default function GiveawaysPage() {
+  const router = useRouter();
   const { user, isLoggedIn } = useAuth();
 
   // ── Filter state ──────────────────────────────────────────────────────────
@@ -46,7 +48,14 @@ export default function GiveawaysPage() {
   }
 
   // ── Data ─────────────────────────────────────────────────────────────────
-  const { giveaways, loading, error, refetch, removeGiveaway } = useGiveaways({
+  const {
+    giveaways,
+    loading,
+    error,
+    refetch,
+    removeGiveaway,
+    updateGiveawayLocally
+  } = useGiveaways({
     category:    category    === "All" ? undefined : category,
     location:    location    === "All" ? undefined : location,
     search:      debouncedSearch,
@@ -70,6 +79,15 @@ export default function GiveawaysPage() {
     setClaimOpen(true);
   }
 
+  function handleClaimSuccess(claimedGiveaway?: Giveaway) {
+    if (claimedGiveaway) {
+      updateGiveawayLocally(claimedGiveaway);
+    }
+    refetch();
+    setToastMessage("Congratulations! You claimed this item. Click 'Message Donor' to arrange pickup.");
+    setTimeout(() => setToastMessage(null), 4500);
+  }
+
   function openUnpublishModal(giveaway: Giveaway) {
     setUnpublishItem(giveaway);
     setUnpublishOpen(true);
@@ -80,6 +98,25 @@ export default function GiveawaysPage() {
     refetch();
     setToastMessage("Giveaway unpublished successfully.");
     setTimeout(() => setToastMessage(null), 3500);
+  }
+
+  async function handleOpenMessage(giveaway: Giveaway) {
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    try {
+      const res = await initiateContact(giveaway._id);
+      if (res.success && res.conversationId) {
+        router.push(`/messages?conversationId=${res.conversationId}`);
+      } else {
+        setToastMessage(res.message || "Failed to open conversation.");
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } catch (err: any) {
+      setToastMessage(err?.message || "Failed to open conversation.");
+      setTimeout(() => setToastMessage(null), 3500);
+    }
   }
 
   // ── Category chip helper ──────────────────────────────────────────────────
@@ -225,6 +262,7 @@ export default function GiveawaysPage() {
                     currentUserId={(user as any)?._id || (user as any)?.id}
                     onClaim={openClaimModal}
                     onUnpublish={openUnpublishModal}
+                    onMessage={handleOpenMessage}
                   />
                 </motion.div>
               ))}
@@ -244,7 +282,8 @@ export default function GiveawaysPage() {
         giveaway={claimItem}
         isOpen={claimOpen}
         onClose={() => { setClaimOpen(false); setClaimItem(null); }}
-        onSuccess={refetch}
+        onSuccess={handleClaimSuccess}
+        onMessage={handleOpenMessage}
       />
 
       <UnpublishConfirmationModal

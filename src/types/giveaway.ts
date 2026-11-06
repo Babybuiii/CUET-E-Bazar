@@ -1,6 +1,6 @@
-// Shared TypeScript types for the Giveaways feature
+// Shared TypeScript types for the Giveaways feature (FCFS)
 
-export type GiveawayStatus = 'available' | 'pending_draw' | 'claimed' | 'expired' | 'cancelled';
+export type GiveawayStatus = 'available' | 'claimed' | 'expired' | 'cancelled';
 
 export type GiveawayCategory = 'Books' | 'Electronics' | 'Study Materials' | 'Accessories' | 'Others';
 
@@ -23,6 +23,16 @@ export interface GiveawayDonor {
   isVerified?: boolean;
 }
 
+export interface GiveawayClaimant {
+  _id: string;
+  fullName: string;
+  userId?: string;
+  department?: string;
+  hall?: string;
+  avatarUrl?: string;
+  isVerified?: boolean;
+}
+
 export interface Giveaway {
   _id: string;
   title: string;
@@ -33,21 +43,16 @@ export interface Giveaway {
   pickupSpot?: string;
   images: string[];
   donor: GiveawayDonor;
-  selectedUser?: { _id: string; fullName: string; userId?: string; department?: string; avatarUrl?: string } | null;
+  selectedUser?: GiveawayClaimant | null;
+  claimedAt?: string | null;
+  claimedCount?: number;
   status: GiveawayStatus;
   deadline: string;
-  claimBufferEndsAt?: string | null;
-  pickupDeadline?: string | null;
   contactInitiatedAt?: string | null;
-  drawResolvedAt?: string | null;
+  conversation?: string | null;
   createdAt: string;
   updatedAt: string;
-  // Only visible to donor/admin:
-  claimBufferApplicants?: Array<{ user: string; claimedAt: string }>;
-  waitlist?: Array<{ user: string; addedAt: string }>;
-  // Annotated by getMyClaims:
-  myClaimRole?: 'winner' | 'waitlisted' | 'applicant' | 'unknown';
-  myWaitlistPos?: number | null;
+  myClaimRole?: 'winner' | 'claimant';
 }
 
 export const GIVEAWAY_CATEGORIES: GiveawayCategory[] = [

@@ -32,38 +32,6 @@ const interestSchema = new mongoose.Schema(
   { _id: true }
 );
 
-// ── Claim Buffer Applicant Sub-Schema ─────────────────────────────────────────
-const claimBufferApplicantSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    claimedAt: {
-      type: Date,
-      default: Date.now
-    }
-  },
-  { _id: true }
-);
-
-// ── Waitlist Entry Sub-Schema ─────────────────────────────────────────────────
-const waitlistEntrySchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    addedAt: {
-      type: Date,
-      default: Date.now
-    }
-  },
-  { _id: true }
-);
-
 // ── Giveaway Schema ───────────────────────────────────────────────────────────
 const giveawaySchema = new mongoose.Schema(
   {
@@ -141,45 +109,43 @@ const giveawaySchema = new mongoose.Schema(
     // ── Interest Tracking (preserved from original) ────────────────────────
     interestedUsers: [interestSchema],
 
+    // ── Claimant (Assigned via FCFS) ───────────────────────────────────────
     selectedUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
     },
 
-    // ── Status ────────────────────────────────────────────────────────────
+    claimedAt: {
+      type: Date,
+      default: null
+    },
+
+    claimedCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    // ── Status (FCFS: available -> claimed, expired, or cancelled) ────────
     status: {
       type: String,
       enum: {
-        values: ['available', 'pending_draw', 'claimed', 'expired', 'cancelled'],
+        values: ['available', 'claimed', 'expired', 'cancelled'],
         message: '{VALUE} is not a valid giveaway status'
       },
       default: 'available'
     },
 
-    // ── Concurrency Tracking (new) ─────────────────────────────────────────
-    claimBufferEndsAt: {
-      type: Date,
-      default: null
-    },
-
-    claimBufferApplicants: [claimBufferApplicantSchema],
-
-    waitlist: [waitlistEntrySchema],
-
-    // ── Pickup & Contact Tracking (new) ───────────────────────────────────
-    pickupDeadline: {
-      type: Date,
-      default: null
-    },
-
+    // ── Direct Contact & Messaging Tracking ───────────────────────────────
     contactInitiatedAt: {
       type: Date,
       default: null
     },
 
-    drawResolvedAt: {
-      type: Date,
+    conversation: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation',
       default: null
     }
   },
@@ -190,8 +156,6 @@ const giveawaySchema = new mongoose.Schema(
 giveawaySchema.index({ donor: 1 });
 giveawaySchema.index({ status: 1 });
 giveawaySchema.index({ deadline: 1 });
-giveawaySchema.index({ status: 1, claimBufferEndsAt: 1 });
-giveawaySchema.index({ status: 1, pickupDeadline: 1 });
 giveawaySchema.index({ selectedUser: 1 });
 
 // ── Export constants for reuse in controller & middleware ─────────────────────

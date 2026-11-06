@@ -8,6 +8,7 @@ import { Logo } from "@/components/shared/logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { NotificationDropdown } from "@/components/notifications/NotificationDropdown";
 import { fetchCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 
@@ -251,9 +252,9 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
                   <span className="hidden xs:inline sm:inline">Sell</span>
                 </button>
 
-                <button className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Notifications">
-                  <Bell size={17} />
-                </button>
+                <div className="hidden md:inline-flex items-center">
+                  <NotificationDropdown />
+                </div>
                 <Link href="/messages" className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Messages">
                   <MessageCircle size={17} />
                 </Link>

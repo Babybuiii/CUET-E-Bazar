@@ -34,6 +34,12 @@ const conversationSchema = new mongoose.Schema(
       default: null
     },
 
+    giveaway: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Giveaway',
+      default: null
+    },
+
     // Snapshot of the last message for quick preview
     lastMessage: {
       text: { type: String, default: '' },

@@ -23,6 +23,7 @@ const notificationSchema = new mongoose.Schema(
           'new_review',
           'admin_warning',
           'giveaway_update',
+          'giveaway_claimed',
           'price_drop',
           'recommendation',
           'report_update',
@@ -55,6 +56,19 @@ const notificationSchema = new mongoose.Schema(
     linkId: {
       type: mongoose.Schema.Types.ObjectId,
       default: null
+    },
+
+    // ── Claimant (for giveaway claims) ───────────────────────────────────────
+    claimant: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+
+    // ── Additional Payload ───────────────────────────────────────────────────
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
     },
 
     // ── Read Status ─────────────────────────────────────────────────────────

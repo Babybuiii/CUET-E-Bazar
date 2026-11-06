@@ -1,18 +1,18 @@
 /**
  * giveawayController.js
  *
- * Full controller for the Giveaways feature.
+ * Full controller for the Giveaways feature — First Come, First Served (FCFS).
  * Integrates with the existing:
  *   - User model (isVerified, isBanned, role, fullName, department)
- *   - Conversation / Message model (messages.js route: POST /api/messages/start)
+ *   - Conversation / Message models (server/models/Message.js)
  *   - Cloudinary config (server/config/cloudinary.js)
  *   - authenticate middleware (server/middleware/auth.js)
  */
 
-const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Giveaway = require('../models/Giveaway');
-const { Conversation } = require('../models/Message');
+const Notification = require('../models/Notification');
+const { Conversation, Message } = require('../models/Message');
 const {
   GIVEAWAY_CATEGORIES,
   GIVEAWAY_CONDITIONS,
@@ -26,23 +26,9 @@ const DURATION_MAP = {
   '7d':   7  * 24 * 60 * 60 * 1000
 };
 
-// 30 seconds claim buffer window (ms)
-const CLAIM_BUFFER_MS = 30 * 1000;
-
-// 6 hour contact deadline (ms)
-const CONTACT_DEADLINE_MS = 6 * 60 * 60 * 1000;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER — Cryptographically secure random integer in [0, max)
-// ─────────────────────────────────────────────────────────────────────────────
-function secureRandomInt(max) {
-  if (max <= 0) throw new Error('max must be a positive integer');
-  return crypto.randomInt(0, max);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. GET /api/giveaways
-//    Public — no auth required for browsing
+//    Public — lists active & claimed giveaways
 // ─────────────────────────────────────────────────────────────────────────────
 const getGiveaways = async (req, res) => {
   try {
@@ -55,12 +41,12 @@ const getGiveaways = async (req, res) => {
     } = req.query;
 
     const filter = {
-      deadline: { $gt: new Date() },   // only non-expired by deadline
-      status: { $nin: ['expired', 'cancelled'] }
+      deadline: { $gt: new Date() },
+      status:   { $nin: ['expired', 'cancelled'] }
     };
 
     if (hideClaimed === 'true') {
-      filter.status = { $in: ['available', 'pending_draw'] };
+      filter.status = 'available';
     }
 
     if (category && category !== 'All') {
@@ -81,14 +67,15 @@ const getGiveaways = async (req, res) => {
     }
 
     const giveaways = await Giveaway.find(filter)
-      .populate('donor', 'fullName userId department hall avatarUrl isVerified')
+      .populate('donor',        'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified')
       .sort({ createdAt: -1 })
       .limit(Number(limit))
       .lean();
 
     return res.json({
       success: true,
-      count: giveaways.length,
+      count:   giveaways.length,
       giveaways
     });
   } catch (err) {
@@ -99,7 +86,7 @@ const getGiveaways = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. GET /api/giveaways/:id
-//    Public — full detail. Sensitive applicant info hidden from non-participants.
+//    Public — full detail of single giveaway
 // ─────────────────────────────────────────────────────────────────────────────
 const getGiveawayById = async (req, res) => {
   try {
@@ -110,24 +97,11 @@ const getGiveawayById = async (req, res) => {
 
     const giveaway = await Giveaway.findById(id)
       .populate('donor',        'fullName userId department hall avatarUrl isVerified')
-      .populate('selectedUser', 'fullName userId department avatarUrl')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified')
       .lean();
 
     if (!giveaway) {
       return res.status(404).json({ success: false, message: 'Giveaway not found.' });
-    }
-
-    // Strip private applicant list unless the requester is donor or admin
-    // (Auth is optional on this endpoint; req.user may not exist)
-    const requesterId = req.user?._id?.toString();
-    const donorId     = giveaway.donor?._id?.toString() || giveaway.donor?.toString();
-    const isAdminOrDonor = requesterId && (
-      requesterId === donorId || req.user?.role === 'admin'
-    );
-
-    if (!isAdminOrDonor) {
-      delete giveaway.claimBufferApplicants;
-      delete giveaway.waitlist;
     }
 
     return res.json({ success: true, giveaway });
@@ -139,6 +113,7 @@ const getGiveawayById = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. POST /api/giveaways
+//    Create a giveaway listing
 //    Requires authenticate + requireGiveawayEligibility
 // ─────────────────────────────────────────────────────────────────────────────
 const createGiveaway = async (req, res) => {
@@ -153,7 +128,6 @@ const createGiveaway = async (req, res) => {
       duration    = '7d'
     } = req.body;
 
-    // ── Validation ──────────────────────────────────────────────────────────
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: 'Item title is required.' });
     }
@@ -178,39 +152,30 @@ const createGiveaway = async (req, res) => {
 
     const deadline = new Date(Date.now() + DURATION_MAP[duration]);
 
-    // ── Handle images (optional — reuse Cloudinary upload from route) ───────
     let images = [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map((f) => {
-        if (f.path || f.secure_url || f.url) {
-          return f.path || f.secure_url || f.url;
-        }
-        if (f.buffer) {
-          return `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
-        }
-        return '';
-      }).filter(Boolean);
+      images = req.files.map((f) => f.path || f.secure_url || f.url || '').filter(Boolean);
     }
 
     const giveaway = await Giveaway.create({
-      title:      title.trim(),
+      title:       title.trim(),
       description: description.trim(),
       category,
       condition,
       location,
-      pickupSpot: pickupSpot.trim(),
+      pickupSpot:  pickupSpot.trim(),
       deadline,
       images,
-      donor:  req.user._id,
-      status: 'available'
+      donor:       req.user._id,
+      status:      'available'
     });
 
     const populated = await Giveaway.findById(giveaway._id)
       .populate('donor', 'fullName userId department hall avatarUrl isVerified');
 
     return res.status(201).json({
-      success: true,
-      message: 'Giveaway published successfully!',
+      success:  true,
+      message:  'Giveaway published successfully!',
       giveaway: populated
     });
   } catch (err) {
@@ -223,11 +188,71 @@ const createGiveaway = async (req, res) => {
   }
 };
 
+/**
+ * Helper to retrieve or create a 2-participant conversation between donor and claimant
+ */
+const findOrCreateGiveawayConversation = async (giveaway, senderId, isClaimant) => {
+  const donorId    = (giveaway.donor?._id || giveaway.donor).toString();
+  const claimantId = (giveaway.selectedUser?._id || giveaway.selectedUser).toString();
+
+  // 1. Check if a conversation already exists for this giveaway
+  let conversation = await Conversation.findOne({
+    participants: { $all: [donorId, claimantId] },
+    giveaway:     giveaway._id
+  });
+
+  // 2. Fallback: check if a general conversation exists between these 2 users
+  if (!conversation) {
+    conversation = await Conversation.findOne({
+      participants: { $all: [donorId, claimantId] },
+      product:      null
+    });
+
+    if (conversation && !conversation.giveaway) {
+      conversation.giveaway = giveaway._id;
+      await conversation.save();
+    }
+  }
+
+  // 3. Create new conversation if none exists yet
+  if (!conversation) {
+    const initialText = isClaimant
+      ? `Hi ${giveaway.donor?.fullName || 'there'}! I claimed your giveaway "${giveaway.title}". I would like to coordinate pickup.`
+      : `Hi ${giveaway.selectedUser?.fullName || 'there'}! Thank you for claiming "${giveaway.title}". Let's arrange pickup.`;
+
+    try {
+      conversation = await Conversation.create({
+        participants: [donorId, claimantId],
+        giveaway:     giveaway._id,
+        product:      null,
+        lastMessage: {
+          text:   initialText,
+          sender: senderId,
+          sentAt: new Date()
+        }
+      });
+
+      await Message.create({
+        conversation: conversation._id,
+        sender:       senderId,
+        text:         initialText
+      });
+    } catch (createErr) {
+      // Concurrency fallback
+      conversation = await Conversation.findOne({
+        participants: { $all: [donorId, claimantId] }
+      });
+      if (!conversation) throw createErr;
+    }
+  }
+
+  return conversation;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. POST /api/giveaways/:id/claim
 //    Requires authenticate + requireGiveawayEligibility
-//
-//    Atomic FCFS with 30-second concurrency window.
+//    First Come, First Served (FCFS) atomic claim
 // ─────────────────────────────────────────────────────────────────────────────
 const claimGiveaway = async (req, res) => {
   try {
@@ -238,350 +263,192 @@ const claimGiveaway = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid giveaway ID.' });
     }
 
-    // Read the current document first (we need the buffer end time)
     const giveaway = await Giveaway.findById(id);
     if (!giveaway) {
       return res.status(404).json({ success: false, message: 'Giveaway not found.' });
     }
 
-    // ── Status checks ────────────────────────────────────────────────────────
+    // 1. Prevent donor from claiming their own item
+    if (giveaway.donor.toString() === userId.toString()) {
+      return res.status(403).json({ success: false, message: 'You cannot claim your own giveaway.' });
+    }
+
+    // 2. Pre-check status
+    if (giveaway.status === 'claimed') {
+      if (giveaway.selectedUser && giveaway.selectedUser.toString() === userId.toString()) {
+        return res.status(409).json({ success: false, message: 'You have already claimed this giveaway.' });
+      }
+      return res.status(409).json({ success: false, message: 'This item has already been claimed by another student.' });
+    }
+
     if (['expired', 'cancelled'].includes(giveaway.status)) {
       return res.status(409).json({
         success: false,
         message: `This giveaway is ${giveaway.status} and no longer accepts claims.`
       });
     }
-    if (giveaway.status === 'claimed') {
-      return res.status(409).json({ success: false, message: 'This item has already been claimed.' });
-    }
 
-    // ── Deadline check ───────────────────────────────────────────────────────
-    if (giveaway.deadline < new Date()) {
+    if (new Date(giveaway.deadline) <= new Date()) {
       return res.status(409).json({ success: false, message: 'The giveaway deadline has passed.' });
     }
 
-    // ── Donor check ──────────────────────────────────────────────────────────
-    if (giveaway.donor.toString() === userId.toString()) {
-      return res.status(403).json({ success: false, message: "You cannot claim your own giveaway." });
+    if (giveaway.status !== 'available') {
+      return res.status(409).json({ success: false, message: 'This item is not available for claiming.' });
     }
 
-    // ── Already selected winner check ────────────────────────────────────────
-    if (giveaway.selectedUser && giveaway.selectedUser.toString() === userId.toString()) {
-      return res.status(409).json({ success: false, message: 'You are already the selected winner.' });
-    }
-
-    // ── Already in waitlist check ────────────────────────────────────────────
-    const inWaitlist = giveaway.waitlist.some(w => w.user.toString() === userId.toString());
-    if (inWaitlist) {
-      return res.status(409).json({ success: false, message: 'You are already on the waitlist for this item.' });
-    }
-
-    // ── Case A: status is 'available' — first claimant, open the buffer ──────
-    if (giveaway.status === 'available') {
-      const bufferEndsAt = new Date(Date.now() + CLAIM_BUFFER_MS);
-
-      // Atomic update: only succeeds if status is still 'available'
-      const updated = await Giveaway.findOneAndUpdate(
-        {
-          _id: id,
-          status: 'available',
-          'claimBufferApplicants.user': { $ne: userId }
+    // 3. Atomic FCFS claim update: only one request wins the race condition
+    const claimed = await Giveaway.findOneAndUpdate(
+      {
+        _id:          id,
+        status:       'available',
+        selectedUser: null,
+        deadline:     { $gt: new Date() }
+      },
+      {
+        $set: {
+          status:       'claimed',
+          selectedUser: userId,
+          claimedAt:    new Date()
         },
-        {
-          $set:  { status: 'pending_draw', claimBufferEndsAt: bufferEndsAt },
-          $push: {
-            claimBufferApplicants: {
-              user:      userId,
-              claimedAt: new Date()
-            }
-          }
-        },
-        { new: true }
-      );
-
-      if (!updated) {
-        // Another request beat us — re-read and attempt to join the buffer below
-        const recheckDoc = await Giveaway.findById(id);
-        if (!recheckDoc) {
-          return res.status(404).json({ success: false, message: 'Giveaway not found.' });
+        $inc: {
+          claimedCount: 1
         }
-        if (recheckDoc.status !== 'pending_draw') {
-          return res.status(409).json({ success: false, message: 'This item is no longer available.' });
-        }
-        // Fall through to pending_draw handler
-        return joinClaimBuffer(recheckDoc, userId, res);
-      }
+      },
+      { new: true }
+    )
+      .populate('donor',        'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified');
 
-      return res.json({
-        success: true,
-        message: 'Claim submitted! A 30-second draw window has started.',
-        claimBufferEndsAt: updated.claimBufferEndsAt,
-        status: updated.status
+    if (!claimed) {
+      return res.status(409).json({
+        success: false,
+        message: 'Another student just claimed this item. It is no longer available.'
       });
     }
 
-    // ── Case B: status is 'pending_draw' — join the existing buffer ──────────
-    if (giveaway.status === 'pending_draw') {
-      return joinClaimBuffer(giveaway, userId, res);
+    // 4. Create or link the donor-claimant conversation
+    let conversation = null;
+    try {
+      conversation = await findOrCreateGiveawayConversation(claimed, userId, true);
+      if (conversation && !claimed.conversation) {
+        claimed.conversation = conversation._id;
+        await claimed.save();
+      }
+    } catch (convErr) {
+      console.warn('Giveaway auto-conversation error:', convErr.message);
     }
 
-    return res.status(409).json({ success: false, message: 'This item is not available for claiming.' });
+    // 5. Notify the donor that their giveaway was claimed
+    try {
+      const claimantUser = claimed.selectedUser;
+      const claimantName = claimantUser?.fullName || 'A CUET student';
+      await Notification.create({
+        recipient: claimed.donor._id || claimed.donor,
+        type:      'giveaway_claimed',
+        title:     'Giveaway Item Claimed!',
+        message:   `Your giveaway item "${claimed.title}" has been claimed by ${claimantName}.`,
+        linkType:  'giveaway',
+        linkId:    claimed._id,
+        claimant:  userId,
+        metadata: {
+          giveawayId:         claimed._id,
+          giveawayTitle:      claimed.title,
+          giveawayImage:      claimed.images?.[0] || null,
+          claimantName:       claimantUser?.fullName || 'CUET Student',
+          claimantAvatar:     claimantUser?.avatarUrl || null,
+          claimantDepartment: claimantUser?.department || null,
+          claimantUserId:     claimantUser?.userId || null,
+          location:           claimed.location,
+          pickupSpot:         claimed.pickupSpot,
+          conversationId:     conversation?._id || null
+        }
+      });
+    } catch (notifErr) {
+      console.error('Failed to create donor notification on claim:', notifErr.message);
+    }
+
+    return res.json({
+      success:        true,
+      message:        'Congratulations! You have successfully claimed this giveaway item.',
+      giveaway:       claimed,
+      conversationId: conversation?._id || null
+    });
   } catch (err) {
     console.error('claimGiveaway error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to submit claim.' });
+    return res.status(500).json({ success: false, message: 'Failed to process claim.' });
   }
 };
 
-// Helper: add a user to an open claim buffer (pending_draw)
-async function joinClaimBuffer(giveaway, userId, res) {
-  const now = new Date();
-
-  // Check buffer hasn't closed
-  if (giveaway.claimBufferEndsAt <= now) {
-    return res.status(409).json({
-      success: false,
-      message: 'The 30-second claim window has closed. Please wait for the draw result.'
-    });
-  }
-
-  // Check not already in buffer
-  const alreadyIn = giveaway.claimBufferApplicants.some(
-    a => a.user.toString() === userId.toString()
-  );
-  if (alreadyIn) {
-    return res.status(409).json({
-      success: false,
-      message: 'You have already submitted a claim for this giveaway.'
-    });
-  }
-
-  // Atomic push — only if still pending_draw and buffer still open and user not already in
-  const updated = await Giveaway.findOneAndUpdate(
-    {
-      _id: giveaway._id,
-      status: 'pending_draw',
-      claimBufferEndsAt: { $gt: now },
-      'claimBufferApplicants.user': { $ne: userId }
-    },
-    {
-      $push: {
-        claimBufferApplicants: {
-          user:      userId,
-          claimedAt: new Date()
-        }
-      }
-    },
-    { new: true }
-  );
-
-  if (!updated) {
-    return res.status(409).json({
-      success: false,
-      message: 'Could not join the claim window. It may have already closed or you already submitted a claim.'
-    });
-  }
-
-  return res.json({
-    success: true,
-    message: 'You have joined the claim window! The draw result will be announced soon.',
-    claimBufferEndsAt: updated.claimBufferEndsAt,
-    status: updated.status
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. resolveGiveaway(giveawayId)
-//    Called by the scheduler when claimBufferEndsAt has passed.
-//    Atomic conditional update prevents double-resolution.
-// ─────────────────────────────────────────────────────────────────────────────
-const resolveGiveaway = async (giveawayId) => {
-  const now = new Date();
-
-  // Atomically acquire this giveaway for resolution by transitioning it out of
-  // pending_draw while the buffer has expired. Only one worker can win this race.
-  const giveaway = await Giveaway.findOneAndUpdate(
-    {
-      _id:               giveawayId,
-      status:            'pending_draw',
-      claimBufferEndsAt: { $lte: now }
-    },
-    {
-      // Temporary marker so no other worker tries this doc simultaneously.
-      // We will overwrite status in the next update.
-      $set: { status: 'claimed' }
-    },
-    { new: false } // return the BEFORE state so we can read the applicants
-  );
-
-  if (!giveaway) {
-    // Another worker already resolved this — idempotent, do nothing
-    return null;
-  }
-
-  const applicants = giveaway.claimBufferApplicants;
-
-  if (!applicants || applicants.length === 0) {
-    // No one claimed — return to available (if deadline not passed) or expire
-    const newStatus = giveaway.deadline > now ? 'available' : 'expired';
-    await Giveaway.findByIdAndUpdate(giveawayId, {
-      $set: { status: newStatus, claimBufferEndsAt: null }
-    });
-    return { resolved: false, reason: 'no_applicants', newStatus };
-  }
-
-  // Pick winner with cryptographically secure random integer
-  const winnerIndex = applicants.length === 1 ? 0 : secureRandomInt(applicants.length);
-  const winner      = applicants[winnerIndex];
-
-  // Waitlist: all other applicants in their original submission order
-  const waitlist = applicants
-    .filter((_, i) => i !== winnerIndex)
-    .map(a => ({ user: a.user, addedAt: a.claimedAt }));
-
-  const pickupDeadline = new Date(now.getTime() + CONTACT_DEADLINE_MS);
-
-  await Giveaway.findByIdAndUpdate(giveawayId, {
-    $set: {
-      status:          'claimed',
-      selectedUser:    winner.user,
-      waitlist,
-      pickupDeadline,
-      drawResolvedAt:  now,
-      claimBufferEndsAt: null
-    }
-  });
-
-  console.log(
-    `[GiveawayResolver] Giveaway ${giveawayId} resolved. ` +
-    `Winner: ${winner.user}. Waitlist size: ${waitlist.length}.`
-  );
-
-  return {
-    resolved:    true,
-    giveawayId:  giveawayId.toString(),
-    winnerId:    winner.user.toString(),
-    waitlistLen: waitlist.length
-  };
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. POST /api/giveaways/:id/contact
-//    Winner initiates contact with the donor via the existing messaging system.
-//    Requires authenticate.
+// 5. POST /api/giveaways/:id/contact
+//    Direct messaging between donor and claimant
+//    Requires authenticate
 // ─────────────────────────────────────────────────────────────────────────────
 const initiateContact = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { id } = req.params;
     const userId = req.user._id;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ success: false, message: 'Invalid giveaway ID.' });
     }
 
-    const giveaway = await Giveaway.findById(id).session(session);
+    const giveaway = await Giveaway.findById(id)
+      .populate('donor',        'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified');
+
     if (!giveaway) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(404).json({ success: false, message: 'Giveaway not found.' });
     }
 
-    // ── Authorization ────────────────────────────────────────────────────────
-    if (!giveaway.selectedUser || giveaway.selectedUser.toString() !== userId.toString()) {
-      await session.abortTransaction();
-      session.endSession();
+    if (giveaway.status !== 'claimed' || !giveaway.selectedUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Direct messaging is only available for claimed giveaways.'
+      });
+    }
+
+    const donorId    = (giveaway.donor?._id || giveaway.donor).toString();
+    const claimantId = (giveaway.selectedUser?._id || giveaway.selectedUser).toString();
+    const myId       = userId.toString();
+
+    const isDonor    = myId === donorId;
+    const isClaimant = myId === claimantId;
+    const isAdmin    = req.user.role === 'admin';
+
+    // 1. Authorization: Only the original donor and the verified claimant can participate
+    if (!isDonor && !isClaimant && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: 'Only the selected winner can initiate contact.'
+        message: 'Only the donor and claimant can access this conversation.'
       });
     }
 
-    if (giveaway.status !== 'claimed') {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(409).json({
-        success: false,
-        message: 'Contact can only be initiated for claimed giveaways.'
-      });
+    // 2. Retrieve or create conversation
+    const conversation = await findOrCreateGiveawayConversation(giveaway, userId, isClaimant);
+
+    // 3. Update giveaway tracking
+    if (!giveaway.contactInitiatedAt || !giveaway.conversation) {
+      giveaway.contactInitiatedAt = giveaway.contactInitiatedAt || new Date();
+      giveaway.conversation       = conversation._id;
+      await giveaway.save();
     }
-
-    // ── Already contacted ────────────────────────────────────────────────────
-    if (giveaway.contactInitiatedAt) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(409).json({
-        success: false,
-        message: 'You have already initiated contact with the donor.'
-      });
-    }
-
-    // ── Deadline check ───────────────────────────────────────────────────────
-    if (giveaway.pickupDeadline && giveaway.pickupDeadline < new Date()) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(409).json({
-        success: false,
-        message: 'Your 6-hour contact deadline has expired.'
-      });
-    }
-
-    const donorId = giveaway.donor.toString();
-
-    // ── Find or create conversation with donor ───────────────────────────────
-    // Reuse the existing Conversation model (from Message.js)
-    let conversation = await Conversation.findOne({
-      participants: { $all: [userId, donorId] }
-    }).session(session);
-
-    if (!conversation) {
-      const created = await Conversation.create(
-        [
-          {
-            participants: [userId, donorId],
-            lastMessage: {
-              text:   `Hi! I'm the giveaway winner for "${giveaway.title}". I'd like to arrange pickup.`,
-              sender: userId,
-              sentAt: new Date()
-            }
-          }
-        ],
-        { session }
-      );
-      conversation = created[0];
-    }
-
-    // ── Mark contact initiated ───────────────────────────────────────────────
-    await Giveaway.findByIdAndUpdate(
-      id,
-      { $set: { contactInitiatedAt: new Date() } },
-      { session }
-    );
-
-    await session.commitTransaction();
-    session.endSession();
 
     return res.json({
-      success: true,
-      message: 'Contact initiated successfully! Head to Messages to coordinate pickup.',
+      success:        true,
+      message:        'Conversation ready.',
       conversationId: conversation._id
     });
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
     console.error('initiateContact error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to initiate contact.' });
+    return res.status(500).json({ success: false, message: 'Failed to open conversation.' });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. DELETE /api/giveaways/:id
-//    Donor or admin can unpublish (cancel).
-//    Cannot cancel a claimed, pending_draw, expired, or already-assigned giveaway.
-//    Requires authenticate.
+// 6. DELETE /api/giveaways/:id
+//    Donor or admin can unpublish (cancel) an available giveaway
+//    Requires authenticate
 // ─────────────────────────────────────────────────────────────────────────────
 const cancelGiveaway = async (req, res) => {
   try {
@@ -606,29 +473,14 @@ const cancelGiveaway = async (req, res) => {
       });
     }
 
-    // Safety checks against non-cancellable states
     if (giveaway.status === 'cancelled') {
       return res.status(409).json({ success: false, message: 'This giveaway is already unpublished.' });
     }
 
-    if (giveaway.status === 'claimed') {
+    if (giveaway.status === 'claimed' || giveaway.selectedUser) {
       return res.status(409).json({
         success: false,
         message: 'This giveaway has already been claimed and cannot be unpublished.'
-      });
-    }
-
-    if (giveaway.status === 'pending_draw') {
-      return res.status(409).json({
-        success: false,
-        message: 'Cannot unpublish this giveaway while a claim draw is in progress.'
-      });
-    }
-
-    if (giveaway.selectedUser) {
-      return res.status(409).json({
-        success: false,
-        message: 'Cannot unpublish this giveaway because a recipient has already been selected.'
       });
     }
 
@@ -639,10 +491,10 @@ const cancelGiveaway = async (req, res) => {
       });
     }
 
-    // Atomic update preventing race conditions with concurrent claims
+    // Atomic update preventing race conditions
     const query = {
-      _id: id,
-      status: 'available',
+      _id:          id,
+      status:       'available',
       selectedUser: null
     };
     if (!isAdmin) {
@@ -663,8 +515,8 @@ const cancelGiveaway = async (req, res) => {
     }
 
     return res.json({
-      success: true,
-      message: 'Giveaway unpublished successfully.',
+      success:  true,
+      message:  'Giveaway unpublished successfully.',
       giveaway: updated
     });
   } catch (err) {
@@ -674,82 +526,13 @@ const cancelGiveaway = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. cascadeGiveaway(giveawayId)
-//    Called by the scheduler when pickupDeadline has passed without contact.
-//    Promotes the next waitlist entry or returns item to available/expired.
-// ─────────────────────────────────────────────────────────────────────────────
-const cascadeGiveaway = async (giveawayId) => {
-  const now = new Date();
-
-  // Atomic acquisition: only act if still claimed, deadline passed, no contact
-  const giveaway = await Giveaway.findOneAndUpdate(
-    {
-      _id:              giveawayId,
-      status:           'claimed',
-      pickupDeadline:   { $lte: now },
-      contactInitiatedAt: null
-    },
-    {
-      // Temporarily mark as available to prevent double processing
-      $set: { status: 'available' }
-    },
-    { new: false }
-  );
-
-  if (!giveaway) {
-    // Already handled by another worker or contact was initiated — idempotent
-    return null;
-  }
-
-  // Remove expired winner from waitlist head (if they somehow got there)
-  const waitlist = (giveaway.waitlist || []).filter(
-    w => w.user.toString() !== (giveaway.selectedUser || '').toString()
-  );
-
-  if (waitlist.length === 0) {
-    // No one left — available or expired based on deadline
-    const newStatus = giveaway.deadline > now ? 'available' : 'expired';
-    await Giveaway.findByIdAndUpdate(giveawayId, {
-      $set: {
-        status:       newStatus,
-        selectedUser: null,
-        pickupDeadline: null
-      }
-    });
-    console.log(`[GiveawayCascade] ${giveawayId} waitlist empty → ${newStatus}`);
-    return { promoted: false, newStatus };
-  }
-
-  // Promote next waitlist member
-  const next          = waitlist[0];
-  const remainingList = waitlist.slice(1);
-  const newDeadline   = new Date(now.getTime() + CONTACT_DEADLINE_MS);
-
-  await Giveaway.findByIdAndUpdate(giveawayId, {
-    $set: {
-      status:          'claimed',
-      selectedUser:    next.user,
-      waitlist:        remainingList,
-      pickupDeadline:  newDeadline,
-      contactInitiatedAt: null
-    }
-  });
-
-  console.log(
-    `[GiveawayCascade] ${giveawayId} promoted ${next.user} from waitlist. ` +
-    `Remaining waitlist: ${remainingList.length}.`
-  );
-
-  return { promoted: true, newWinnerId: next.user.toString() };
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. GET /api/giveaways/my-giveaways — donor's own listings
+// 7. GET /api/giveaways/my-giveaways — Donor's own listings
 // ─────────────────────────────────────────────────────────────────────────────
 const getMyGiveaways = async (req, res) => {
   try {
     const giveaways = await Giveaway.find({ donor: req.user._id })
-      .populate('selectedUser', 'fullName userId department avatarUrl')
+      .populate('donor',        'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -761,41 +544,29 @@ const getMyGiveaways = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. GET /api/giveaways/my-claims — items this user has claimed/applied for
+// 8. GET /api/giveaways/my-claims — Items this user has claimed
 // ─────────────────────────────────────────────────────────────────────────────
 const getMyClaims = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const giveaways = await Giveaway.find({
-      $or: [
-        { 'claimBufferApplicants.user': userId },
-        { selectedUser: userId },
-        { 'waitlist.user': userId }
-      ]
-    })
-      .populate('donor', 'fullName userId department avatarUrl')
-      .sort({ createdAt: -1 })
+    const giveaways = await Giveaway.find({ selectedUser: userId })
+      .populate('donor',        'fullName userId department hall avatarUrl isVerified contactNumber email')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified')
+      .sort({ updatedAt: -1 })
       .lean();
 
-    // Annotate each doc with the user's claim role (selected / waitlisted / applicant)
-    const annotated = giveaways.map(g => {
-      const isSelected  = g.selectedUser?.toString() === userId.toString();
-      const waitlistPos = (g.waitlist || []).findIndex(w => w.user.toString() === userId.toString());
-      const isApplicant = (g.claimBufferApplicants || []).some(a => a.user.toString() === userId.toString());
+    const annotated = giveaways.map(g => ({
+      ...g,
+      myClaimRole: 'winner'
+    }));
 
-      // Strip other applicants' identities
-      delete g.claimBufferApplicants;
-      delete g.waitlist;
-
-      return {
-        ...g,
-        myClaimRole:    isSelected ? 'winner' : waitlistPos >= 0 ? 'waitlisted' : isApplicant ? 'applicant' : 'unknown',
-        myWaitlistPos:  waitlistPos >= 0 ? waitlistPos + 1 : null
-      };
+    return res.json({
+      success:   true,
+      count:     annotated.length,
+      claims:    annotated,
+      giveaways: annotated
     });
-
-    return res.json({ success: true, count: annotated.length, giveaways: annotated });
   } catch (err) {
     console.error('getMyClaims error:', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch your claims.' });
@@ -807,11 +578,8 @@ module.exports = {
   getGiveawayById,
   createGiveaway,
   claimGiveaway,
-  resolveGiveaway,
   initiateContact,
   cancelGiveaway,
-  cascadeGiveaway,
   getMyGiveaways,
   getMyClaims
 };
-
