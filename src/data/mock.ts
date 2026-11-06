@@ -139,8 +139,9 @@ export const PUBLIC_NAV_LINKS = [
 export const navLinks = [
   { name: "Home", href: "/home" },
   { name: "Marketplace", href: "/marketplace" },
-  { name: "Giveaways", href: "/giveaways" },
   { name: "Campus Shops", href: "/shops" },
+  { name: "Giveaways", href: "/giveaways" },
+  { name: "My Orders", href: "/my-orders" },
   { name: "Messages", href: "/messages" },
   { name: "Wishlist", href: "/wishlist" },
   { name: "My Listings", href: "/my-listings" },

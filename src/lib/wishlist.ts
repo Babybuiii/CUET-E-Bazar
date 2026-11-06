@@ -26,18 +26,36 @@ export function saveLocalWishlistIds(ids: string[]): void {
   }
 }
 
+export function clearLocalWishlist(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent("wishlist-updated", { detail: { ids: [] } }));
+  } catch (err) {
+    console.error("Failed to clear local wishlist:", err);
+  }
+}
+
 export function isWishlistedLocally(productId: string): boolean {
-  if (!productId) return false;
+  if (!productId || typeof window === "undefined") return false;
+  const token = localStorage.getItem("cuet_ebazar_token");
+  if (!token) return false;
   const ids = getLocalWishlistIds();
   return ids.includes(productId);
 }
 
 /**
  * Toggles a product in the user's wishlist.
- * Instant local update + event broadcast + background server sync.
+ * Requires user authentication.
  */
 export async function toggleWishlist(productId: string): Promise<boolean> {
-  if (!productId) return false;
+  if (!productId || typeof window === "undefined") return false;
+
+  const token = localStorage.getItem("cuet_ebazar_token");
+  if (!token) {
+    alert("Please log in to your account to add items to your wishlist.");
+    return false;
+  }
 
   const currentIds = getLocalWishlistIds();
   const exists = currentIds.includes(productId);
@@ -49,59 +67,58 @@ export async function toggleWishlist(productId: string): Promise<boolean> {
   saveLocalWishlistIds(updatedIds);
 
   // 2. Server sync if authenticated
-  const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
-  if (token) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/products/${productId}/wishlist`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const data = await res.json();
-      if (data.success && typeof data.isWishlisted === "boolean") {
-        const latestIds = getLocalWishlistIds();
-        const finalIds = data.isWishlisted
-          ? Array.from(new Set([productId, ...latestIds]))
-          : latestIds.filter((id) => id !== productId);
-        saveLocalWishlistIds(finalIds);
-        return data.isWishlisted;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/products/${productId}/wishlist`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
       }
-    } catch (err) {
-      console.warn("Server wishlist sync warning:", err);
+    });
+    const data = await res.json();
+    if (data.success && typeof data.isWishlisted === "boolean") {
+      const latestIds = getLocalWishlistIds();
+      const finalIds = data.isWishlisted
+        ? Array.from(new Set([productId, ...latestIds]))
+        : latestIds.filter((id) => id !== productId);
+      saveLocalWishlistIds(finalIds);
+      return data.isWishlisted;
     }
+  } catch (err) {
+    console.warn("Server wishlist sync warning:", err);
   }
 
   return !exists;
 }
 
 /**
- * Fetches wishlisted products, combining backend data with local storage fallbacks.
+ * Fetches wishlisted products for authenticated users.
  */
 export async function fetchWishlistProducts(): Promise<any[]> {
   const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
 
-  // If logged in, fetch from backend
-  if (token) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/products/user/wishlist`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.products)) {
-        // Sync local IDs with backend products
-        const backendIds = data.products.map((p: any) => p._id || p.id).filter(Boolean);
-        saveLocalWishlistIds(backendIds);
-        return data.products;
-      }
-    } catch (err) {
-      console.warn("Failed to fetch backend wishlist, falling back to local IDs:", err);
-    }
+  if (!token) {
+    clearLocalWishlist();
+    return [];
   }
 
-  // Fallback / guest mode: fetch all products and filter by local IDs
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/products/user/wishlist`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const data = await res.json();
+    if (data.success && Array.isArray(data.products)) {
+      // Sync local IDs with backend products
+      const backendIds = data.products.map((p: any) => p._id || p.id).filter(Boolean);
+      saveLocalWishlistIds(backendIds);
+      return data.products;
+    }
+  } catch (err) {
+    console.warn("Failed to fetch backend wishlist, falling back to local IDs:", err);
+  }
+
+  // Fallback: fetch products by cached IDs
   const localIds = getLocalWishlistIds();
   if (localIds.length === 0) return [];
 

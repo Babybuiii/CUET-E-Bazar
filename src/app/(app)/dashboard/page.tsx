@@ -15,7 +15,8 @@ import {
   ArrowRight,
   LogIn,
   RefreshCw,
-  Heart
+  Heart,
+  Users
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
@@ -35,6 +36,7 @@ type ProductAnalytics = {
   status: "active" | "sold" | "reserved" | "removed_by_admin";
   images: Array<{ url?: string; thumbnailUrl?: string } | string>;
   viewsCount: number;
+  uniqueViewsCount?: number;
   wishlistCount: number;
   createdAt: string;
 };
@@ -47,6 +49,7 @@ type DashboardAnalytics = {
   totalRevenue: number;
   potentialRevenue: number;
   totalAdClicks: number;
+  totalUniqueVisitors?: number;
   totalWishlists: number;
   conversionRate: number;
   clickToSaveRate: string;
@@ -72,6 +75,7 @@ export default function SellerDashboardPage() {
     totalRevenue: 0,
     potentialRevenue: 0,
     totalAdClicks: 0,
+    totalUniqueVisitors: 0,
     totalWishlists: 0,
     conversionRate: 0,
     clickToSaveRate: "0.0"
@@ -288,18 +292,26 @@ export default function SellerDashboardPage() {
         <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 truncate">
-              Ad Clicks
+              Ad Clicks & Visitors
             </span>
             <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
               <Eye size={14} />
             </div>
           </div>
           <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              {analytics.totalAdClicks}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Total impressions
+            <div className="flex items-baseline gap-1.5">
+              <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
+                {analytics.totalAdClicks}
+              </p>
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                clicks
+              </span>
+            </div>
+            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1">
+              <Users size={11} className="text-blue-500" />
+              <span>
+                <strong>{analytics.totalUniqueVisitors ?? (analytics.totalAdClicks > 0 ? 1 : 0)}</strong> unique {analytics.totalUniqueVisitors === 1 ? "user" : "users"}
+              </span>
             </p>
           </div>
         </Card>
@@ -498,9 +510,15 @@ export default function SellerDashboardPage() {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-[10px]">
+                        <span
+                          className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-[10px]"
+                          title={`${item.viewsCount} total clicks by ${item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)} unique users`}
+                        >
                           <Eye size={11} />
                           {item.viewsCount}
+                          <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400 border-l border-blue-200 dark:border-blue-800 pl-1 ml-0.5">
+                            {item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)}u
+                          </span>
                         </span>
                         <span
                           className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-full text-[10px] ${
@@ -558,7 +576,7 @@ export default function SellerDashboardPage() {
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-2 font-bold">Product</th>
                     <th className="py-3 px-3 font-bold">Price</th>
-                    <th className="py-3 px-3 font-bold text-center">Ad Clicks</th>
+                    <th className="py-3 px-3 font-bold text-center">Ad Clicks & Visitors</th>
                     <th className="py-3 px-3 font-bold text-center">Wishlists</th>
                     <th className="py-3 px-3 font-bold">Status</th>
                     <th className="py-3 px-2 font-bold text-right">Actions</th>
@@ -615,12 +633,18 @@ export default function SellerDashboardPage() {
                           )}
                         </td>
 
-                        {/* Ad Clicks Column */}
+                        {/* Ad Clicks & Visitors Column */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-xs">
-                            <Eye size={12} />
-                            {item.viewsCount}
-                          </span>
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-xs" title="Total clicks">
+                              <Eye size={12} />
+                              {item.viewsCount} {item.viewsCount === 1 ? "click" : "clicks"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400" title="Unique users">
+                              <Users size={11} className="text-blue-400" />
+                              {item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)} unique
+                            </span>
+                          </div>
                         </td>
 
                         {/* Wishlist Column */}

@@ -7,6 +7,20 @@ export function getAuthToken(): string | null {
   return localStorage.getItem("cuet_ebazar_token");
 }
 
+import { clearLocalWishlist } from "@/lib/wishlist";
+
+export function clearAuthSession(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem("cuet_ebazar_token");
+    localStorage.removeItem("cuet_ebazar_user");
+    clearLocalWishlist();
+    window.dispatchEvent(new Event("auth-changed"));
+  } catch {
+    // Ignore if localStorage unavailable
+  }
+}
+
 export function useAuth() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [user, setUser] = useState<any | null>(null);
@@ -41,15 +55,9 @@ export function useAuth() {
   }, []);
 
   const logout = () => {
-    try {
-      localStorage.removeItem("cuet_ebazar_token");
-      localStorage.removeItem("cuet_ebazar_user");
-      setIsLoggedIn(false);
-      setUser(null);
-      window.dispatchEvent(new Event("auth-changed"));
-    } catch {
-      // Ignore if localStorage unavailable
-    }
+    clearAuthSession();
+    setIsLoggedIn(false);
+    setUser(null);
   };
 
   return { isLoggedIn, user, loading, logout };

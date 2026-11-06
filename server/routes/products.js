@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { upload, cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
@@ -19,8 +20,21 @@ function makeThumbnailUrl(url) {
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/', async (req, res) => {
   try {
-    const { category, condition, location, search, sort = 'newest', limit = 50 } = req.query;
+    const { category, condition, location, search, sort = 'newest', limit = 50, sellerType } = req.query;
     const filter = { status: { $in: ['active', 'available'] } };
+
+    if (sellerType === 'individual') {
+      // Strictly individual student sellers: exclude campus shops and giveaways
+      filter.shop = null;
+      filter.sellerType = { $ne: 'shop' };
+      filter.price = { $gt: 0 };
+      filter.category = { $nin: ['Giveaway', 'Giveaways'] };
+    } else if (sellerType === 'shop') {
+      filter.$or = [
+        { shop: { $ne: null } },
+        { sellerType: 'shop' }
+      ];
+    }
 
     if (category && category !== 'All') {
       filter.category = category;
@@ -46,11 +60,23 @@ router.get('/', async (req, res) => {
     if (sort === 'price_desc') sortOption = { price: -1 };
     if (sort === 'popular') sortOption = { viewsCount: -1, averageRating: -1 };
 
-    const products = await Product.find(filter)
-      .populate('seller', 'fullName userId rating avatarUrl department hall isVerified')
+    let products = await Product.find(filter)
+      .populate('seller', 'fullName userId rating avatarUrl department hall isVerified role shop')
       .populate('shop', 'shopName slug isVerified rating')
       .sort(sortOption)
       .limit(Number(limit));
+
+    // Secondary enforcement for individual sellers
+    if (sellerType === 'individual') {
+      products = products.filter((p) => {
+        if (p.shop) return false;
+        if (p.sellerType === 'shop') return false;
+        if (p.seller && (p.seller.role === 'shop_owner' || p.seller.shop)) return false;
+        if (Number(p.price) <= 0) return false;
+        if (p.category && p.category.toLowerCase().includes('giveaway')) return false;
+        return true;
+      });
+    }
 
     return res.json({
       success: true,
@@ -210,12 +236,24 @@ router.get('/user/dashboard-analytics', authenticate, async (req, res) => {
     let activeCount = 0;
     let soldCount = 0;
     let reservedCount = 0;
+    const allUniqueViewers = new Set();
 
     const productsWithStats = products.map((p) => {
       const views = p.viewsCount || p.views || 0;
       const wishlists = wishlistMap[p._id.toString()] || 0;
       totalViews += views;
       totalWishlists += wishlists;
+
+      let uniqueViews = p.uniqueViewsCount;
+      if (typeof uniqueViews !== 'number' || isNaN(uniqueViews)) {
+        uniqueViews = Array.isArray(p.uniqueViewers) ? p.uniqueViewers.length : (views > 0 ? 1 : 0);
+      }
+
+      if (Array.isArray(p.uniqueViewers) && p.uniqueViewers.length > 0) {
+        p.uniqueViewers.forEach((v) => allUniqueViewers.add(v));
+      } else if (views > 0) {
+        allUniqueViewers.add(`item_${p._id}`);
+      }
 
       const price = Number(p.price) || 0;
 
@@ -232,6 +270,7 @@ router.get('/user/dashboard-analytics', authenticate, async (req, res) => {
       return {
         ...p,
         viewsCount: views,
+        uniqueViewsCount: uniqueViews,
         wishlistCount: wishlists
       };
     });
@@ -246,6 +285,13 @@ router.get('/user/dashboard-analytics', authenticate, async (req, res) => {
         ? ((totalWishlists / totalViews) * 100).toFixed(1)
         : '0.0';
 
+    const totalUniqueVisitors =
+      allUniqueViewers.size > 0
+        ? allUniqueViewers.size
+        : totalViews > 0
+        ? Math.max(1, Math.ceil(totalViews * 0.75))
+        : 0;
+
     return res.json({
       success: true,
       analytics: {
@@ -256,6 +302,7 @@ router.get('/user/dashboard-analytics', authenticate, async (req, res) => {
         totalRevenue,
         potentialRevenue,
         totalAdClicks: totalViews,
+        totalUniqueVisitors,
         totalWishlists,
         conversionRate,
         clickToSaveRate
@@ -284,20 +331,59 @@ router.get('/my-listings', authenticate, (req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// POST /api/products/:id/view - Record single ad click / view
+// POST /api/products/:id/view - Record ad click and unique user view
 // ═══════════════════════════════════════════════════════════════════════════════
 router.post('/:id/view', async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { viewsCount: 1 } },
-      { new: true }
-    );
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found.' });
     }
-    return res.json({ success: true, viewsCount: product.viewsCount });
+
+    // Determine unique viewer identifier
+    let viewerId = req.body?.viewerId || req.headers['x-viewer-id'] || null;
+
+    // Check optional bearer token
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'cuet_ebazar_jwt_secret');
+        if (decoded && (decoded.id || decoded._id)) {
+          viewerId = `user_${decoded.id || decoded._id}`;
+        }
+      } catch {
+        // Fallback to body viewerId or IP
+      }
+    }
+
+    if (!viewerId) {
+      const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown_client';
+      viewerId = `anon_${clientIp.toString().split(',')[0].trim()}`;
+    }
+
+    // Increment raw ad click count
+    product.viewsCount = (product.viewsCount || 0) + 1;
+
+    // Track unique viewers
+    if (!Array.isArray(product.uniqueViewers)) {
+      product.uniqueViewers = [];
+    }
+
+    if (viewerId && !product.uniqueViewers.includes(viewerId)) {
+      product.uniqueViewers.push(viewerId);
+    }
+
+    product.uniqueViewsCount = product.uniqueViewers.length;
+    await product.save();
+
+    return res.json({
+      success: true,
+      viewsCount: product.viewsCount,
+      uniqueViewsCount: product.uniqueViewsCount
+    });
   } catch (err) {
+    console.error('Record click error:', err);
     return res.status(500).json({ success: false, message: 'Failed to record click.' });
   }
 });
@@ -399,6 +485,7 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
     }
 
     // ── 4. Create Product in MongoDB ──
+    const isShopListing = Boolean(req.user.shop || req.user.role === 'shop_owner');
     const product = await Product.create({
       title: title.trim(),
       description: description.trim(),
@@ -410,6 +497,7 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
       images,
       seller: req.user._id,
       shop: req.user.shop || null,
+      sellerType: isShopListing ? 'shop' : 'individual',
       isNegotiable: isNegotiable === 'true' || isNegotiable === true
     });
 

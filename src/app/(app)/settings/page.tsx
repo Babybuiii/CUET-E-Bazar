@@ -29,6 +29,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
+import { clearAuthSession } from "@/lib/auth";
 
 const DEFAULT_DEPARTMENTS = [
   "Civil Engineering",
@@ -399,12 +400,7 @@ export default function SettingsPage() {
 
   // Handle Logout
   const handleLogout = () => {
-    try {
-      localStorage.removeItem("cuet_ebazar_token");
-      localStorage.removeItem("cuet_ebazar_user");
-    } catch {
-      // ignore
-    }
+    clearAuthSession();
     router.push("/login");
   };
 

@@ -79,7 +79,11 @@ export function ProductCard({ product }: { product: Product }) {
     };
 
     window.addEventListener("wishlist-updated", handleWishlistChange);
-    return () => window.removeEventListener("wishlist-updated", handleWishlistChange);
+    window.addEventListener("auth-changed", handleWishlistChange);
+    return () => {
+      window.removeEventListener("wishlist-updated", handleWishlistChange);
+      window.removeEventListener("auth-changed", handleWishlistChange);
+    };
   }, [productId]);
 
   const handleToggleWishlist = async (e: React.MouseEvent) => {
