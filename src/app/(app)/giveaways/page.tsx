@@ -9,12 +9,14 @@ import {
   Plus,
   Loader2,
   AlertCircle,
-  PackageOpen
+  PackageOpen,
+  CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GiveawayCard } from "@/components/giveaways/GiveawayCard";
 import { OfferGiveawayModal } from "@/components/giveaways/OfferGiveawayModal";
 import { ClaimConfirmationModal } from "@/components/giveaways/ClaimConfirmationModal";
+import { UnpublishConfirmationModal } from "@/components/giveaways/UnpublishConfirmationModal";
 import { useGiveaways } from "@/hooks/useGiveaways";
 import { useAuth } from "@/lib/auth";
 import {
@@ -44,7 +46,7 @@ export default function GiveawaysPage() {
   }
 
   // ── Data ─────────────────────────────────────────────────────────────────
-  const { giveaways, loading, error, refetch } = useGiveaways({
+  const { giveaways, loading, error, refetch, removeGiveaway } = useGiveaways({
     category:    category    === "All" ? undefined : category,
     location:    location    === "All" ? undefined : location,
     search:      debouncedSearch,
@@ -52,9 +54,12 @@ export default function GiveawaysPage() {
   });
 
   // ── Modal state ───────────────────────────────────────────────────────────
-  const [offerOpen,  setOfferOpen]  = useState(false);
-  const [claimItem,  setClaimItem]  = useState<Giveaway | null>(null);
-  const [claimOpen,  setClaimOpen]  = useState(false);
+  const [offerOpen,      setOfferOpen]      = useState(false);
+  const [claimItem,      setClaimItem]      = useState<Giveaway | null>(null);
+  const [claimOpen,      setClaimOpen]      = useState(false);
+  const [unpublishItem,  setUnpublishItem]  = useState<Giveaway | null>(null);
+  const [unpublishOpen,  setUnpublishOpen]  = useState(false);
+  const [toastMessage,   setToastMessage]   = useState<string | null>(null);
 
   function openClaimModal(giveaway: Giveaway) {
     if (!isLoggedIn) {
@@ -63,6 +68,18 @@ export default function GiveawaysPage() {
     }
     setClaimItem(giveaway);
     setClaimOpen(true);
+  }
+
+  function openUnpublishModal(giveaway: Giveaway) {
+    setUnpublishItem(giveaway);
+    setUnpublishOpen(true);
+  }
+
+  function handleUnpublishSuccess(giveawayId: string) {
+    removeGiveaway(giveawayId);
+    refetch();
+    setToastMessage("Giveaway unpublished successfully.");
+    setTimeout(() => setToastMessage(null), 3500);
   }
 
   // ── Category chip helper ──────────────────────────────────────────────────
@@ -207,6 +224,7 @@ export default function GiveawaysPage() {
                     giveaway={g}
                     currentUserId={(user as any)?._id || (user as any)?.id}
                     onClaim={openClaimModal}
+                    onUnpublish={openUnpublishModal}
                   />
                 </motion.div>
               ))}
@@ -228,6 +246,21 @@ export default function GiveawaysPage() {
         onClose={() => { setClaimOpen(false); setClaimItem(null); }}
         onSuccess={refetch}
       />
+
+      <UnpublishConfirmationModal
+        giveaway={unpublishItem}
+        isOpen={unpublishOpen}
+        onClose={() => { setUnpublishOpen(false); setUnpublishItem(null); }}
+        onSuccess={handleUnpublishSuccess}
+      />
+
+      {/* ── Feedback Toast Alert ────────────────────────────────────────────── */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-slate-900 text-white px-4 py-3 shadow-2xl text-sm font-medium border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

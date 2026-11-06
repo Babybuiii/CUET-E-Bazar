@@ -129,7 +129,7 @@ export function ClaimConfirmationModal({
                   <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                     <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden bg-slate-200">
                       {displayImage ? (
-                        <Image src={displayImage} alt={giveaway.title} fill className="object-cover" />
+                        <Image src={displayImage} alt={giveaway.title} fill className="object-cover" unoptimized={displayImage.includes("cloudinary.com") || displayImage.startsWith("data:")} />
                       ) : (
                         <div className="flex h-full items-center justify-center">
                           <Gift size={24} className="text-slate-400" />

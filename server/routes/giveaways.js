@@ -82,7 +82,15 @@ router.post(
   '/',
   authenticate,
   requireGiveawayEligibility,
-  upload.array('images', 5),
+  (req, res, next) => {
+    upload.array('images', 5)(req, res, (err) => {
+      if (err) {
+        console.error('Giveaway upload error:', err);
+        return res.status(400).json({ success: false, message: err.message || 'Image upload failed.' });
+      }
+      next();
+    });
+  },
   createGiveaway
 );
 
@@ -109,10 +117,17 @@ router.post(
 
 /**
  * DELETE /api/giveaways/:id
- * Cancel a giveaway (donor or admin only).
+ * PATCH  /api/giveaways/:id/cancel
+ * Unpublish / cancel a giveaway (donor or admin only).
  */
 router.delete(
   '/:id',
+  authenticate,
+  cancelGiveaway
+);
+
+router.patch(
+  '/:id/cancel',
   authenticate,
   cancelGiveaway
 );

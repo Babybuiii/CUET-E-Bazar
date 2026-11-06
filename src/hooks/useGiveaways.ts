@@ -17,12 +17,17 @@ interface UseGiveawaysReturn {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  removeGiveaway: (id: string) => void;
 }
 
 export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn {
   const [giveaways, setGiveaways] = useState<Giveaway[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const removeGiveaway = useCallback((id: string) => {
+    setGiveaways(prev => prev.filter(g => g._id !== id));
+  }, []);
 
   const fetchGiveaways = useCallback(async () => {
     setLoading(true);
@@ -52,7 +57,7 @@ export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn 
     return () => clearInterval(intervalId);
   }, [fetchGiveaways]);
 
-  return { giveaways, loading, error, refetch: fetchGiveaways };
+  return { giveaways, loading, error, refetch: fetchGiveaways, removeGiveaway };
 }
 
 // ── Single giveaway fetcher ───────────────────────────────────────────────────
@@ -73,12 +78,17 @@ export async function createGiveaway(formData: FormData): Promise<{ success: boo
   const token = getAuthToken();
   if (!token) return { success: false, message: "You must be logged in." };
 
-  const res  = await fetch(`${API_BASE_URL}/api/giveaways`, {
-    method:  "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body:    formData
-  });
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/giveaways`, {
+      method:  "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body:    formData
+    });
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Failed to communicate with server." };
+  }
 }
 
 // ── Claim a giveaway ──────────────────────────────────────────────────────────
@@ -105,15 +115,35 @@ export async function initiateContact(id: string): Promise<{ success: boolean; m
   return res.json();
 }
 
-// ── Cancel a giveaway ─────────────────────────────────────────────────────────
+// ── Cancel / Unpublish a giveaway ───────────────────────────────────────────
 export async function cancelGiveaway(id: string): Promise<{ success: boolean; message: string }> {
-  const token = getAuthToken();
-  if (!token) return { success: false, message: "You must be logged in." };
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "Authentication required. Please log in again." };
 
-  const res  = await fetch(`${API_BASE_URL}/api/giveaways/${id}`, {
-    method:  "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return res.json();
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}`, {
+      method:  "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        return { success: false, message: "Session expired. Please log in again." };
+      }
+      if (res.status === 403) {
+        return { success: false, message: data?.message || "Only the original donor can unpublish this giveaway." };
+      }
+      return { success: false, message: data?.message || "Failed to unpublish giveaway." };
+    }
+
+    return { success: true, message: data?.message || "Giveaway unpublished successfully." };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
 }
 

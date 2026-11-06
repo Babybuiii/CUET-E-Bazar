@@ -3,19 +3,23 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'yycr5ehf';
-const apiKey = process.env.CLOUDINARY_API_KEY || '717351537846877';
-const apiSecret = process.env.CLOUDINARY_API_SECRET || 'ZJqiiDdA-kPr0nDSI32d5Lx_4BQ';
+const isRealValue = (v) => Boolean(v && typeof v === 'string' && v.trim() && !v.includes('your_') && !v.includes('<') && v !== 'yycr5ehf');
 
-cloudinary.config({
-  cloud_name: cloudName,
-  api_key: apiKey,
-  api_secret: apiSecret
-});
+const rawCloud = process.env.CLOUDINARY_CLOUD_NAME;
+const rawKey   = process.env.CLOUDINARY_API_KEY;
+const rawSec   = process.env.CLOUDINARY_API_SECRET;
 
-const isCloudinaryConfigured = Boolean(cloudName && apiKey && apiSecret);
+const isCloudinaryConfigured = isRealValue(rawCloud) && isRealValue(rawKey) && isRealValue(rawSec);
 
-// ── Product image storage ─────────────────────────────────────────────────────
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: rawCloud.trim(),
+    api_key: rawKey.trim(),
+    api_secret: rawSec.trim()
+  });
+}
+
+// ── Product & giveaway image storage ──────────────────────────────────────────
 let storage;
 
 if (isCloudinaryConfigured) {

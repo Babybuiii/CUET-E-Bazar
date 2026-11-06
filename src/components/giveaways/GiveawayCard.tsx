@@ -14,7 +14,8 @@ import {
   Loader2,
   XCircle,
   TimerReset,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { Giveaway } from "@/types/giveaway";
@@ -49,9 +50,10 @@ interface GiveawayCardProps {
   giveaway: Giveaway;
   currentUserId?: string;
   onClaim: (giveaway: Giveaway) => void;
+  onUnpublish?: (giveaway: Giveaway) => void;
 }
 
-export function GiveawayCard({ giveaway, currentUserId, onClaim }: GiveawayCardProps) {
+export function GiveawayCard({ giveaway, currentUserId, onClaim, onUnpublish }: GiveawayCardProps) {
   const [timeLeft, setTimeLeft] = useState(() => getTimeLeft(giveaway.deadline));
   const [bufferLeft, setBufferLeft] = useState<number | null>(
     giveaway.claimBufferEndsAt ? getBufferSecondsLeft(giveaway.claimBufferEndsAt) : null
@@ -68,7 +70,8 @@ export function GiveawayCard({ giveaway, currentUserId, onClaim }: GiveawayCardP
     return () => clearInterval(id);
   }, [giveaway.deadline, giveaway.claimBufferEndsAt]);
 
-  const isOwnGiveaway = currentUserId && giveaway.donor?._id === currentUserId;
+  const donorId = typeof giveaway.donor === "object" ? giveaway.donor?._id : giveaway.donor;
+  const isOwnGiveaway = Boolean(currentUserId && donorId && String(donorId) === String(currentUserId));
   const displayImage  = giveaway.images?.[0] || null;
 
   // ── Status config ─────────────────────────────────────────────────────────
@@ -116,9 +119,15 @@ export function GiveawayCard({ giveaway, currentUserId, onClaim }: GiveawayCardP
     }
     if (giveaway.status === "available" && isOwnGiveaway) {
       return (
-        <div className="w-full rounded-full border border-slate-200 px-4 py-2 text-center text-sm font-medium text-slate-500">
-          Your Giveaway
-        </div>
+        <button
+          type="button"
+          onClick={() => onUnpublish?.(giveaway)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 px-4 py-2 text-sm font-semibold transition"
+          title="Unpublish this giveaway"
+        >
+          <Trash2 size={14} />
+          <span>Unpublish Giveaway</span>
+        </button>
       );
     }
     if (giveaway.status === "pending_draw") {
@@ -166,7 +175,7 @@ export function GiveawayCard({ giveaway, currentUserId, onClaim }: GiveawayCardP
               src={displayImage}
               alt={giveaway.title}
               fill
-              unoptimized={displayImage.includes("cloudinary.com")}
+              unoptimized={displayImage.includes("cloudinary.com") || displayImage.startsWith("data:")}
               className="object-cover transition duration-300 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
@@ -181,6 +190,13 @@ export function GiveawayCard({ giveaway, currentUserId, onClaim }: GiveawayCardP
           <span className="absolute top-2 left-2 rounded-full bg-[#0f766e] px-2.5 py-0.5 text-[10px] font-extrabold text-white shadow-sm">
             100% FREE
           </span>
+
+          {/* Donor ownership badge */}
+          {isOwnGiveaway && (
+            <span className="absolute top-2 left-24 rounded-full bg-slate-900/75 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+              Your Post
+            </span>
+          )}
 
           {/* Condition badge */}
           <span className={`absolute top-2 right-2 rounded-full border px-2 py-0.5 text-[10px] font-bold ${conditionColors[giveaway.condition] || "bg-slate-100 text-slate-700 border-slate-300"}`}>

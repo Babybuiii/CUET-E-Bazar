@@ -181,7 +181,15 @@ const createGiveaway = async (req, res) => {
     // ── Handle images (optional — reuse Cloudinary upload from route) ───────
     let images = [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map((f) => f.path || f.secure_url || f.url || '').filter(Boolean);
+      images = req.files.map((f) => {
+        if (f.path || f.secure_url || f.url) {
+          return f.path || f.secure_url || f.url;
+        }
+        if (f.buffer) {
+          return `data:${f.mimetype};base64,${f.buffer.toString('base64')}`;
+        }
+        return '';
+      }).filter(Boolean);
     }
 
     const giveaway = await Giveaway.create({
@@ -571,7 +579,8 @@ const initiateContact = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. DELETE /api/giveaways/:id
-//    Donor or admin can cancel. Cannot cancel a 'claimed' giveaway.
+//    Donor or admin can unpublish (cancel).
+//    Cannot cancel a claimed, pending_draw, expired, or already-assigned giveaway.
 //    Requires authenticate.
 // ─────────────────────────────────────────────────────────────────────────────
 const cancelGiveaway = async (req, res) => {
@@ -593,27 +602,74 @@ const cancelGiveaway = async (req, res) => {
     if (!isDonor && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: 'Only the donor or an administrator can cancel this giveaway.'
+        message: 'Only the original donor can unpublish this giveaway.'
       });
     }
 
-    if (giveaway.status === 'claimed' && !isAdmin) {
+    // Safety checks against non-cancellable states
+    if (giveaway.status === 'cancelled') {
+      return res.status(409).json({ success: false, message: 'This giveaway is already unpublished.' });
+    }
+
+    if (giveaway.status === 'claimed') {
       return res.status(409).json({
         success: false,
-        message: 'This giveaway has already been claimed. Contact support to cancel.'
+        message: 'This giveaway has already been claimed and cannot be unpublished.'
       });
     }
 
-    if (giveaway.status === 'cancelled') {
-      return res.status(409).json({ success: false, message: 'This giveaway is already cancelled.' });
+    if (giveaway.status === 'pending_draw') {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot unpublish this giveaway while a claim draw is in progress.'
+      });
     }
 
-    await Giveaway.findByIdAndUpdate(id, { $set: { status: 'cancelled' } });
+    if (giveaway.selectedUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot unpublish this giveaway because a recipient has already been selected.'
+      });
+    }
 
-    return res.json({ success: true, message: 'Giveaway cancelled successfully.' });
+    if (giveaway.status === 'expired' || new Date(giveaway.deadline) <= new Date()) {
+      return res.status(409).json({
+        success: false,
+        message: 'This giveaway has already expired and cannot be unpublished.'
+      });
+    }
+
+    // Atomic update preventing race conditions with concurrent claims
+    const query = {
+      _id: id,
+      status: 'available',
+      selectedUser: null
+    };
+    if (!isAdmin) {
+      query.donor = req.user._id;
+    }
+
+    const updated = await Giveaway.findOneAndUpdate(
+      query,
+      { $set: { status: 'cancelled' } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(409).json({
+        success: false,
+        message: 'Giveaway could not be unpublished due to a concurrent status change. Please refresh.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Giveaway unpublished successfully.',
+      giveaway: updated
+    });
   } catch (err) {
     console.error('cancelGiveaway error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to cancel giveaway.' });
+    return res.status(500).json({ success: false, message: 'Failed to unpublish giveaway.' });
   }
 };
 

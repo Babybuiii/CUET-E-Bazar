@@ -110,8 +110,8 @@ export function OfferGiveawayModal({ isOpen, onClose, onSuccess }: OfferGiveaway
           onSuccess?.();
         }, 2000);
       }
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
