@@ -108,7 +108,7 @@ export default function ShopOwnerLoginPage() {
 
       setSuccess("Logged in successfully! Redirecting to your dashboard...");
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push("/shop-portal/dashboard");
       }, 1000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to log in.";

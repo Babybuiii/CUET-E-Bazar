@@ -79,6 +79,12 @@ const shopSchema = new mongoose.Schema(
       default: false
     },
 
+    // ── Availability ──────────────────────────────────────────────────────────────────────
+    isOpen: {
+      type: Boolean,
+      default: true
+    },
+
     // ── Analytics ───────────────────────────────────────────────────────────
     rating: {
       type: Number,

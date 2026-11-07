@@ -5,6 +5,7 @@ const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const Shop = require('../models/Shop');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,7 +73,7 @@ router.post('/checkout', authenticate, async (req, res) => {
         meetupLocation: deliveryAddress
       });
 
-      createdOrders.push(newOrder);
+      createdOrders.push({ order: newOrder, product });
       orderedProductIds.push(product._id.toString());
     }
 
@@ -92,7 +93,48 @@ router.post('/checkout', authenticate, async (req, res) => {
       await userCart.save();
     }
 
-    const populatedOrders = await Order.find({ _id: { $in: createdOrders.map((o) => o._id) } })
+    // ── Notify shop owners about new orders ────────────────────────────────────
+    try {
+      const buyer = await User.findById(req.user._id).select('fullName avatarUrl');
+      // Group by shop owner to send one notification per shop per checkout
+      const ownerNotifMap = {};
+      for (const { order, product } of createdOrders) {
+        if (!product.seller) continue;
+        const ownerKey = product.seller.toString();
+        if (!ownerNotifMap[ownerKey]) {
+          ownerNotifMap[ownerKey] = { ownerId: product.seller, items: [], orderId: order._id };
+        }
+        ownerNotifMap[ownerKey].items.push({ title: product.title, qty: order.quantity });
+        ownerNotifMap[ownerKey].totalAmount = (ownerNotifMap[ownerKey].totalAmount || 0) + order.totalPrice;
+      }
+
+      for (const ownerKey of Object.keys(ownerNotifMap)) {
+        const { ownerId, items, orderId, totalAmount } = ownerNotifMap[ownerKey];
+        const itemsSummary = items.map(i => `${i.qty}x ${i.title}`).join(', ');
+        const buyerName = buyer?.fullName || 'A student';
+
+        await Notification.create({
+          recipient: ownerId,
+          type: 'new_order',
+          title: 'New Order Received!',
+          message: `${buyerName} placed an order for ${itemsSummary}. Total: ৳${totalAmount}.`,
+          linkType: 'order',
+          linkId: orderId,
+          metadata: {
+            buyerId: req.user._id,
+            buyerName: buyer?.fullName,
+            buyerAvatar: buyer?.avatarUrl,
+            items,
+            totalAmount
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.warn('Order notification error (non-fatal):', notifErr.message);
+    }
+
+    const orderIds = createdOrders.map(({ order }) => order._id);
+    const populatedOrders = await Order.find({ _id: { $in: orderIds } })
       .populate('product', 'title price images category condition')
       .populate('shop', 'shopName slug location contactNumber')
       .populate('seller', 'fullName contactNumber email');
@@ -135,12 +177,22 @@ router.get('/my-orders', authenticate, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/shop-orders', authenticate, async (req, res) => {
   try {
+    // Find the shop owned by this user
+    const shop = await Shop.findOne({ owner: req.user._id }).select('_id');
     const queryConditions = [{ seller: req.user._id }];
-    if (req.user.shop) {
+    if (shop) {
+      queryConditions.push({ shop: shop._id });
+    } else if (req.user.shop) {
       queryConditions.push({ shop: req.user.shop });
     }
 
-    const orders = await Order.find({ $or: queryConditions })
+    const { status } = req.query;
+    let filter = { $or: queryConditions };
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const orders = await Order.find(filter)
       .populate('buyer', 'fullName contactNumber email department hall avatarUrl studentId')
       .populate('product', 'title price images category condition')
       .populate('shop', 'shopName slug location')
@@ -158,12 +210,13 @@ router.get('/shop-orders', authenticate, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PATCH /api/orders/:id/status - Update order status (confirm, complete, cancel)
+// PATCH /api/orders/:id/status - Update order status (confirm, complete, cancel, etc.)
 // ═══════════════════════════════════════════════════════════════════════════════
 router.patch('/:id/status', authenticate, async (req, res) => {
   try {
     const { status, cancelReason } = req.body;
-    if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(status)) {
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready_for_pickup', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid order status.' });
     }
 
@@ -172,9 +225,11 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found.' });
     }
 
+    // Find shop for ownership check
+    const shop = await Shop.findOne({ owner: req.user._id }).select('_id');
     const isSeller = order.seller.toString() === req.user._id.toString();
     const isBuyer = order.buyer.toString() === req.user._id.toString();
-    const isShopOwner = req.user.shop && order.shop && req.user.shop.toString() === order.shop.toString();
+    const isShopOwner = shop && order.shop && shop._id.toString() === order.shop.toString();
     const isAdmin = req.user.role === 'admin';
 
     // Buyer can only cancel if still pending
@@ -189,6 +244,7 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to modify this order.' });
     }
 
+    const previousStatus = order.status;
     order.status = status;
     if (status === 'completed') {
       order.completedAt = new Date();
@@ -199,8 +255,34 @@ router.patch('/:id/status', authenticate, async (req, res) => {
 
     await order.save();
 
+    // ── Notify buyer about order status change ─────────────────────────────────
+    try {
+      if (previousStatus !== status && (isShopOwner || isSeller || isAdmin)) {
+        const statusLabels = {
+          confirmed: 'Your order has been confirmed!',
+          preparing: 'Your order is being prepared.',
+          ready_for_pickup: 'Your order is ready for pickup!',
+          completed: 'Your order has been completed.',
+          cancelled: 'Your order has been cancelled.'
+        };
+        const label = statusLabels[status];
+        if (label) {
+          await Notification.create({
+            recipient: order.buyer,
+            type: 'order_update',
+            title: 'Order Status Updated',
+            message: label + (cancelReason ? ` Reason: ${cancelReason}` : ''),
+            linkType: 'order',
+            linkId: order._id
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.warn('Status notification error (non-fatal):', notifErr.message);
+    }
+
     const populatedOrder = await Order.findById(order._id)
-      .populate('buyer', 'fullName contactNumber email department hall')
+      .populate('buyer', 'fullName contactNumber email department hall avatarUrl')
       .populate('product', 'title price images category condition')
       .populate('shop', 'shopName slug location')
       .populate('seller', 'fullName contactNumber email');

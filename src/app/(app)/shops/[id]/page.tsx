@@ -313,7 +313,7 @@ export default function ShopDetailsPage() {
               src={shop.bannerUrl!}
               alt={`${shop.shopName} Banner`}
               fill
-              unoptimized={shop.bannerUrl!.includes("cloudinary.com")}
+              unoptimized={shop.bannerUrl!.includes("cloudinary.com") || shop.bannerUrl!.startsWith("data:")}
               priority
               className="object-cover"
             />
@@ -336,7 +336,7 @@ export default function ShopDetailsPage() {
                     src={shop.logoUrl!}
                     alt={shop.shopName}
                     fill
-                    unoptimized={shop.logoUrl!.includes("cloudinary.com")}
+                    unoptimized={shop.logoUrl!.includes("cloudinary.com") || shop.logoUrl!.startsWith("data:")}
                     className="object-cover"
                   />
                 ) : (
@@ -515,7 +515,7 @@ export default function ShopDetailsPage() {
                             alt={product.title}
                             fill
                             quality={90}
-                            unoptimized={imgUrl.includes("cloudinary.com")}
+                            unoptimized={imgUrl.includes("cloudinary.com") || imgUrl.startsWith("data:")}
                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                             className="object-contain p-3 transition duration-300 group-hover:scale-105"
                           />

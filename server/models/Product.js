@@ -8,6 +8,9 @@ const PRODUCT_CATEGORIES = [
   'Furniture & Dorm Essentials',
   'Bicycles & Sports',
   'Clothing & Accessories',
+  'Food & Beverages',
+  'Stationery',
+  'Health & Beauty',
   'Others'
 ];
 
@@ -88,13 +91,24 @@ const productSchema = new mongoose.Schema(
       validate: [
         {
           validator: function (v) {
-            return v.length >= 3;
+            if (this && (this.sellerType === 'shop' || this.shop)) {
+              if (!Array.isArray(v) || v.length < 1) {
+                throw new Error('A shop product must have at least 1 photo');
+              }
+              return true;
+            }
+            if (!Array.isArray(v) || v.length < 3) {
+              throw new Error('A product listing must have at least 3 photos');
+            }
+            return true;
           },
-          message: 'A product listing must have at least 3 photos'
+          message: function (props) {
+            return props.reason?.message || 'A product listing must have at least 3 photos';
+          }
         },
         {
           validator: function (v) {
-            return v.length <= 8;
+            return Array.isArray(v) && v.length <= 8;
           },
           message: 'A product can have at most 8 photos'
         }

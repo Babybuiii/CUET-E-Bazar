@@ -205,7 +205,7 @@ export default function ShopsPage() {
                         src={shop.bannerUrl!}
                         alt={`${shop.shopName} banner`}
                         fill
-                        unoptimized={shop.bannerUrl!.includes("cloudinary.com")}
+                        unoptimized={shop.bannerUrl!.includes("cloudinary.com") || shop.bannerUrl!.startsWith("data:")}
                         className="object-cover transition duration-300 group-hover:scale-105"
                       />
                     ) : (
@@ -230,7 +230,7 @@ export default function ShopsPage() {
                           src={shop.logoUrl!}
                           alt={shop.shopName}
                           fill
-                          unoptimized={shop.logoUrl!.includes("cloudinary.com")}
+                          unoptimized={shop.logoUrl!.includes("cloudinary.com") || shop.logoUrl!.startsWith("data:")}
                           className="object-cover"
                         />
                       ) : (
