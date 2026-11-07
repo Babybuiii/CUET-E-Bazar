@@ -59,7 +59,6 @@ const userSchema = new mongoose.Schema(
     studentId: {
       type: String,
       trim: true,
-      sparse: true,
       validate: {
         validator: function (v) {
           if (this.role === 'student' || v) {
@@ -229,6 +228,14 @@ userSchema.pre('save', async function (next) {
 });
 
 // ── Indexes ─────────────────────────────────────────────────────────────────
+// Student IDs stay unique, but only among documents that actually have one.
+// A plain unique index would treat every shop owner's missing studentId as null
+// and reject the second one with an E11000 duplicate key error.
+userSchema.index(
+  { studentId: 1 },
+  { unique: true, partialFilterExpression: { studentId: { $type: 'string' } } }
+);
+
 userSchema.index({ department: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ rating: -1 });

@@ -148,3 +148,27 @@ export const navLinks = [
   { name: "Dashboard", href: "/dashboard" },
   { name: "Settings", href: "/settings" }
 ];
+
+// Shop owners get a shop-first workspace instead of the student browsing links
+export const SHOP_OWNER_NAV_LINKS = [
+  { name: "My Shop", href: "/my-shop" },
+  { name: "Dashboard", href: "/dashboard" },
+  { name: "Messages", href: "/messages" },
+  { name: "Settings", href: "/settings" }
+];
+
+// Student-only browsing routes. Shop owners are redirected away from these.
+// Note: only the exact paths - /marketplace/[id] and /shops/[id] stay reachable
+// so owners can still open their own product pages and their public shop page.
+export const SHOP_OWNER_BLOCKED_PATHS = [
+  "/home",
+  "/marketplace",
+  "/giveaways",
+  "/wishlist",
+  "/shops",
+  "/my-listings"
+];
+
+export function getNavLinks(role?: string | null) {
+  return role === "shop_owner" ? SHOP_OWNER_NAV_LINKS : navLinks;
+}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertCircle, CheckCircle2, Clock, Loader2, MapPin, Sparkles, Store, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Logo } from "@/components/shared/logo";
+import { ShopImagePicker } from "@/components/shops/shop-image-picker";
 import { CUET_DEPARTMENTS, CUET_HALLS } from "@/data/mock";
 import { API_BASE_URL } from "@/lib/api";
 import {
@@ -17,10 +18,27 @@ import {
   isFirebaseConfigured
 } from "@/lib/firebase";
 
+type RoleOption = "student" | "shop_owner";
+
+const SHOP_CATEGORIES = [
+  "General Store & Grocery",
+  "Stationery & Photocopy",
+  "Electronics & Accessories",
+  "Food, Snacks & Cafeteria",
+  "Clothing & Tailoring",
+  "Books & Academic Resources",
+  "Pharmacy & Personal Care",
+  "Gadget Repair & Services",
+  "Others"
+];
+
 export default function SignupPage() {
   const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [role, setRole] = useState<RoleOption>("student");
 
-  const [form, setForm] = useState({
+  // Student specific form state
+  const [studentForm, setStudentForm] = useState({
     fullName: "",
     studentId: "",
     email: "",
@@ -31,31 +49,78 @@ export default function SignupPage() {
     confirmPassword: ""
   });
 
+  // Shop Owner specific form state (based on Shop.js & User.js)
+  const [shopForm, setShopForm] = useState({
+    fullName: "", // Owner's name
+    email: "", // Business or personal contact email
+    contactNumber: "", // Phone / WhatsApp
+    shopName: "", // Shop name (unique)
+    shopCategory: SHOP_CATEGORIES[0],
+    shopDescription: "",
+    shopLocation: "CUET Central Cafeteria Area",
+    openTime: "09:00",
+    closeTime: "21:00",
+    password: "",
+    confirmPassword: ""
+  });
+
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState("");
+
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const progress = useMemo(() => (step / 2) * 100, [step]);
+
+  const handleStudentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setStudentForm((prev) => ({ ...prev, [name]: value }));
     setError(null);
   };
 
-  const validate = () => {
-    if (!form.fullName.trim()) return "Full name is required";
-    if (!/^\d{7}$/.test(form.studentId.trim())) {
+  const handleShopChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setShopForm((prev) => ({ ...prev, [name]: value }));
+    setError(null);
+  };
+
+  const validateStudentForm = () => {
+    if (!studentForm.fullName.trim()) return "Full name is required";
+    if (!/^\d{7}$/.test(studentForm.studentId.trim())) {
       return "Student ID must be exactly 7 digits (e.g. 2204120)";
     }
-    if (!/^[^\s@]+@[^\s@]*cuet\.ac\.bd$/i.test(form.email.trim())) {
+    if (!/^[^\s@]+@[^\s@]*cuet\.ac\.bd$/i.test(studentForm.email.trim())) {
       return "Must be a valid CUET email ending with .cuet.ac.bd";
     }
-    if (!/^(\+?880|0)1[3-9]\d{8}$/.test(form.contactNumber.trim())) {
+    if (!/^(\+?880|0)1[3-9]\d{8}$/.test(studentForm.contactNumber.trim())) {
       return "Please enter a valid Bangladeshi contact number (e.g. 01712345678)";
     }
-    if (form.password.length < 6) {
+    if (studentForm.password.length < 6) {
       return "Password must be at least 6 characters long";
     }
-    if (form.password !== form.confirmPassword) {
+    if (studentForm.password !== studentForm.confirmPassword) {
+      return "Passwords do not match";
+    }
+    return null;
+  };
+
+  const validateShopForm = () => {
+    if (!shopForm.fullName.trim()) return "Owner full name is required";
+    if (!shopForm.shopName.trim()) return "Shop / Business name is required";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shopForm.email.trim())) {
+      return "Please enter a valid email address";
+    }
+    if (!/^(\+?880|0)1[3-9]\d{8}$/.test(shopForm.contactNumber.trim())) {
+      return "Please enter a valid contact number (e.g. 01712345678)";
+    }
+    if (!shopForm.shopLocation.trim()) return "Shop campus location is required";
+    if (shopForm.password.length < 6) {
+      return "Password must be at least 6 characters long";
+    }
+    if (shopForm.password !== shopForm.confirmPassword) {
       return "Passwords do not match";
     }
     return null;
@@ -65,7 +130,7 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    const validationErr = validate();
+    const validationErr = role === "student" ? validateStudentForm() : validateShopForm();
     if (validationErr) {
       setError(validationErr);
       return;
@@ -74,13 +139,14 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const email = form.email.trim().toLowerCase();
+      const email = role === "student" ? studentForm.email.trim().toLowerCase() : shopForm.email.trim().toLowerCase();
+      const password = role === "student" ? studentForm.password : shopForm.password;
       let firebaseUid: string | undefined = undefined;
 
       // ── Optional Firebase Email Auth step if configured ──
       if (isFirebaseConfigured && auth) {
         try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, form.password);
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           firebaseUid = userCredential.user.uid;
           try {
             await sendEmailVerification(userCredential.user);
@@ -100,17 +166,35 @@ export default function SignupPage() {
         }
       }
 
-      const payload = {
-        role: "student",
-        fullName: form.fullName.trim(),
-        studentId: form.studentId.trim(),
-        email,
-        department: form.department,
-        hall: form.hall,
-        contactNumber: form.contactNumber.trim(),
-        password: form.password,
-        ...(firebaseUid ? { firebaseUid } : {})
-      };
+      const payload =
+        role === "student"
+          ? {
+              role: "student",
+              fullName: studentForm.fullName.trim(),
+              studentId: studentForm.studentId.trim(),
+              email,
+              department: studentForm.department,
+              hall: studentForm.hall,
+              contactNumber: studentForm.contactNumber.trim(),
+              password,
+              ...(firebaseUid ? { firebaseUid } : {})
+            }
+          : {
+              role: "shop_owner",
+              fullName: shopForm.fullName.trim(),
+              email,
+              contactNumber: shopForm.contactNumber.trim(),
+              password,
+              shopName: shopForm.shopName.trim(),
+              shopCategory: shopForm.shopCategory,
+              shopDescription: shopForm.shopDescription.trim(),
+              shopLocation: shopForm.shopLocation.trim(),
+              operatingHours: {
+                open: shopForm.openTime,
+                close: shopForm.closeTime
+              },
+              ...(firebaseUid ? { firebaseUid } : {})
+            };
 
       const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
@@ -130,14 +214,38 @@ export default function SignupPage() {
         window.dispatchEvent(new Event("auth-changed"));
       }
 
+      // Shop branding is optional, so upload it after the account exists.
+      // A failure here must not undo a successful registration.
+      if (role === "shop_owner" && data.token && (logoFile || bannerFile)) {
+        try {
+          const imageData = new FormData();
+          if (logoFile) imageData.append("logo", logoFile);
+          if (bannerFile) imageData.append("banner", bannerFile);
+
+          const imgRes = await fetch(`${API_BASE_URL}/api/shops/my-shop/images`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${data.token}` },
+            body: imageData
+          });
+          const imgData = await imgRes.json().catch(() => null);
+          if (!imgRes.ok || !imgData?.success) {
+            console.warn("Shop image upload skipped:", imgData?.message || `HTTP ${imgRes.status}`);
+          }
+        } catch (imgErr) {
+          console.warn("Shop image upload failed:", imgErr);
+        }
+      }
+
       setSuccessMsg(
         isFirebaseConfigured
           ? "Account created & Firebase verification email sent! Check your inbox."
+          : role === "shop_owner"
+          ? "Shop Owner account and shop profile created successfully! Redirecting..."
           : "Account created successfully! Redirecting to marketplace..."
       );
 
       setTimeout(() => {
-        router.push("/home");
+        router.push(role === "shop_owner" ? "/dashboard" : "/home");
       }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to connect to registration server.";
@@ -157,10 +265,24 @@ export default function SignupPage() {
           </span>
         </div>
 
-        <h1 className="mt-5 font-display text-2xl sm:text-3xl font-bold">Student Registration</h1>
+        <h1 className="mt-5 font-display text-2xl sm:text-3xl font-bold">
+          {step === 1
+            ? "Create your Account"
+            : role === "student"
+            ? "Student Registration"
+            : "Shop Owner & Store Registration"}
+        </h1>
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-          Join as a CUET student with your academic credentials to buy, sell, and participate in giveaways.
+          {step === 1
+            ? "Choose your account type to proceed with tailored credentials."
+            : role === "student"
+            ? "Join as a CUET student with your academic credentials to buy, sell, and participate in giveaways."
+            : "Register your campus business, establish your storefront, and manage products on CUET E-Bazar."}
         </p>
+
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          <motion.div className="h-full bg-brand-emerald" animate={{ width: `${progress}%` }} />
+        </div>
 
         {error && (
           <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs sm:text-sm text-rose-600 dark:text-rose-400">
@@ -176,152 +298,462 @@ export default function SignupPage() {
           </div>
         )}
 
-        <motion.form
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          onSubmit={handleSubmit}
-          className="mt-6 grid gap-4 sm:grid-cols-2"
-        >
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Full Name *
-              <input
-                name="fullName"
-                value={form.fullName}
-                onChange={handleChange}
-                placeholder="e.g. Sadman Sakib"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
-          </div>
+        {step === 1 ? (
+          <div className="mt-6 space-y-4">
+            <div>
+              <p className="text-sm font-semibold">Step 1: Choose account type</p>
+              <p className="text-xs text-slate-500">Select whether you are registering as an individual student or an official shop.</p>
+            </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Student ID * <span className="text-slate-400 font-normal">(7 digits, e.g. 2204120)</span>
-              <input
-                name="studentId"
-                value={form.studentId}
-                onChange={handleChange}
-                placeholder="2204120"
-                maxLength={7}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              CUET Email * <span className="text-slate-400 font-normal">(*.cuet.ac.bd)</span>
-              <input
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="u2204120@student.cuet.ac.bd"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Department *
-              <select
-                name="department"
-                value={form.department}
-                onChange={handleChange}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setRole("student")}
+                className={`focus-ring rounded-2xl border p-4 text-left transition ${
+                  role === "student"
+                    ? "border-brand-emerald bg-brand-emerald/10 shadow-sm"
+                    : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
+                }`}
               >
-                {CUET_DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={18} className="text-brand-emerald" />
+                    <p className="font-semibold text-sm">CUET Student</p>
+                  </div>
+                  {role === "student" && <Sparkles size={14} className="text-brand-emerald" />}
+                </div>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Requires 7-digit Student ID & CUET academic email. Buy & sell personal items, list giveaways.
+                </p>
+              </button>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Hall of Residence *
-              <select
-                name="hall"
-                value={form.hall}
-                onChange={handleChange}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
+              <button
+                type="button"
+                onClick={() => setRole("shop_owner")}
+                className={`focus-ring rounded-2xl border p-4 text-left transition ${
+                  role === "shop_owner"
+                    ? "border-brand-emerald bg-brand-emerald/10 shadow-sm"
+                    : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
+                }`}
               >
-                {CUET_HALLS.map((hall) => (
-                  <option key={hall} value={hall}>
-                    {hall}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Store size={18} className="text-brand-emerald" />
+                    <p className="font-semibold text-sm">Campus Shop Owner</p>
+                  </div>
+                  {role === "shop_owner" && <Sparkles size={14} className="text-brand-emerald" />}
+                </div>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Requires store details, location, category & operating hours. Manage inventory, stock, and orders.
+                </p>
+              </button>
+            </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Contact / WhatsApp Number *
-              <input
-                name="contactNumber"
-                type="tel"
-                value={form.contactNumber}
-                onChange={handleChange}
-                placeholder="01712345678"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
+            <div className="pt-2">
+              <Button onClick={() => setStep(2)} className="w-full sm:w-auto">
+                Continue to Details
+              </Button>
+            </div>
           </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.form
+              key={role}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              onSubmit={handleSubmit}
+              className="mt-6 grid gap-4 sm:grid-cols-2"
+            >
+              {/* ========================================================================= */}
+              {/* STUDENT FORM FIELDS                                                      */}
+              {/* ========================================================================= */}
+              {role === "student" ? (
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Full Name *
+                      <input
+                        name="fullName"
+                        value={studentForm.fullName}
+                        onChange={handleStudentChange}
+                        placeholder="e.g. Sadman Sakib"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Password *
-              <input
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
-          </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Student ID * <span className="text-slate-400 font-normal">(7 digits, e.g. 2204120)</span>
+                      <input
+                        name="studentId"
+                        value={studentForm.studentId}
+                        onChange={handleStudentChange}
+                        placeholder="2204120"
+                        maxLength={7}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Confirm Password *
-              <input
-                name="confirmPassword"
-                type="password"
-                value={form.confirmPassword}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
-                required
-              />
-            </label>
-          </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      CUET Email * <span className="text-slate-400 font-normal">(*.cuet.ac.bd)</span>
+                      <input
+                        name="email"
+                        type="email"
+                        value={studentForm.email}
+                        onChange={handleStudentChange}
+                        placeholder="u2204120@student.cuet.ac.bd"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
 
-          <div className="sm:col-span-2 pt-3">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 size={16} className="animate-spin" />
-                  Creating Account...
-                </span>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Department *
+                      <select
+                        name="department"
+                        value={studentForm.department}
+                        onChange={handleStudentChange}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      >
+                        {CUET_DEPARTMENTS.map((dept) => (
+                          <option key={dept} value={dept}>
+                            {dept}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Hall of Residence *
+                      <select
+                        name="hall"
+                        value={studentForm.hall}
+                        onChange={handleStudentChange}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      >
+                        {CUET_HALLS.map((hall) => (
+                          <option key={hall} value={hall}>
+                            {hall}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Contact / WhatsApp Number *
+                      <input
+                        name="contactNumber"
+                        type="tel"
+                        value={studentForm.contactNumber}
+                        onChange={handleStudentChange}
+                        placeholder="01712345678"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Password *
+                      <input
+                        name="password"
+                        type="password"
+                        value={studentForm.password}
+                        onChange={handleStudentChange}
+                        placeholder="••••••••"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Confirm Password *
+                      <input
+                        name="confirmPassword"
+                        type="password"
+                        value={studentForm.confirmPassword}
+                        onChange={handleStudentChange}
+                        placeholder="••••••••"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+                </>
               ) : (
-                "Create Student Account"
+                /* ========================================================================= */
+                /* SHOP OWNER FORM FIELDS (From Shop.js & User.js)                           */
+                /* ========================================================================= */
+                <>
+                  {/* Shop Details Header */}
+                  <div className="sm:col-span-2 rounded-xl bg-slate-50 p-3 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 flex items-center gap-2">
+                    <Store size={18} className="text-brand-emerald" />
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Campus Shop & Business Details
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop / Store Name *
+                      <input
+                        name="shopName"
+                        value={shopForm.shopName}
+                        onChange={handleShopChange}
+                        placeholder="e.g. CUET Central Stationery & Print"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop Category *
+                      <select
+                        name="shopCategory"
+                        value={shopForm.shopCategory}
+                        onChange={handleShopChange}
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      >
+                        {SHOP_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop Location on Campus *
+                      <div className="relative mt-1">
+                        <MapPin size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          name="shopLocation"
+                          value={shopForm.shopLocation}
+                          onChange={handleShopChange}
+                          placeholder="e.g. Beside Central Cafeteria / Shahid Minar Gate"
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop Description
+                      <textarea
+                        name="shopDescription"
+                        value={shopForm.shopDescription}
+                        onChange={handleShopChange}
+                        rows={2}
+                        placeholder="Tell students about what your shop offers, specialty items, or photocopy/delivery service..."
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Shop branding - both optional, uploaded right after signup */}
+                  <div className="sm:col-span-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 dark:border-slate-700 dark:bg-slate-900/40">
+                      <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+                        Shop Branding{" "}
+                        <span className="font-normal text-slate-400">— optional, you can add these later</span>
+                      </p>
+                      <div className="flex flex-col gap-4 sm:flex-row">
+                        <div className="shrink-0">
+                          <ShopImagePicker
+                            kind="logo"
+                            previewUrl={logoPreview}
+                            onSelect={(f) => {
+                              setLogoFile(f);
+                              setLogoPreview(URL.createObjectURL(f));
+                            }}
+                            onRemove={() => {
+                              setLogoFile(null);
+                              setLogoPreview("");
+                            }}
+                            onError={setError}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <ShopImagePicker
+                            kind="banner"
+                            previewUrl={bannerPreview}
+                            onSelect={(f) => {
+                              setBannerFile(f);
+                              setBannerPreview(URL.createObjectURL(f));
+                            }}
+                            onRemove={() => {
+                              setBannerFile(null);
+                              setBannerPreview("");
+                            }}
+                            onError={setError}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operating Hours */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Opening Time (Daily)
+                      <div className="relative mt-1">
+                        <Clock size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          name="openTime"
+                          type="time"
+                          value={shopForm.openTime}
+                          onChange={handleShopChange}
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Closing Time (Daily)
+                      <div className="relative mt-1">
+                        <Clock size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          name="closeTime"
+                          type="time"
+                          value={shopForm.closeTime}
+                          onChange={handleShopChange}
+                          className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Owner Credentials Header */}
+                  <div className="sm:col-span-2 mt-2 rounded-xl bg-slate-50 p-3 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700 flex items-center gap-2">
+                    <UserCheck size={18} className="text-brand-emerald" />
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Owner Account Credentials
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Owner Full Name *
+                      <input
+                        name="fullName"
+                        value={shopForm.fullName}
+                        onChange={handleShopChange}
+                        placeholder="e.g. Md. Rafiqul Islam"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Business / Owner Email *
+                      <input
+                        name="email"
+                        type="email"
+                        value={shopForm.email}
+                        onChange={handleShopChange}
+                        placeholder="shop@example.com"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop Hotline / WhatsApp Number *
+                      <input
+                        name="contactNumber"
+                        type="tel"
+                        value={shopForm.contactNumber}
+                        onChange={handleShopChange}
+                        placeholder="01812345678"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Password *
+                      <input
+                        name="password"
+                        type="password"
+                        value={shopForm.password}
+                        onChange={handleShopChange}
+                        placeholder="••••••••"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Confirm Password *
+                      <input
+                        name="confirmPassword"
+                        type="password"
+                        value={shopForm.confirmPassword}
+                        onChange={handleShopChange}
+                        placeholder="••••••••"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm outline-none focus:border-brand-emerald dark:border-slate-700 dark:bg-slate-900"
+                        required
+                      />
+                    </label>
+                  </div>
+                </>
               )}
-            </Button>
-          </div>
-        </motion.form>
+
+              {/* Form buttons */}
+              <div className="sm:col-span-2 flex flex-col-reverse sm:flex-row gap-3 pt-3">
+                <Button type="button" variant="ghost" onClick={() => setStep(1)} disabled={loading}>
+                  Back
+                </Button>
+                <Button type="submit" className="flex-1" disabled={loading}>
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 size={16} className="animate-spin" />
+                      {role === "shop_owner" ? "Creating Shop & Account..." : "Creating Account..."}
+                    </span>
+                  ) : role === "shop_owner" ? (
+                    "Register Campus Shop"
+                  ) : (
+                    "Create Student Account"
+                  )}
+                </Button>
+              </div>
+            </motion.form>
+          </AnimatePresence>
+        )}
 
         <p className="mt-6 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
           Already have an account?{" "}
@@ -333,3 +765,5 @@ export default function SignupPage() {
     </div>
   );
 }
+
+

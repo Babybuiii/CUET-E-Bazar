@@ -34,12 +34,12 @@ app.use(cors({
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/auth',      authRoutes);
-app.use('/api/products',  productRoutes);
-app.use('/api/messages',  messageRoutes);
-app.use('/api/shops',     shopRoutes);
-app.use('/api/queries',   queryRoutes);
-app.use('/api/cart',      cartRoutes);
+app.use('/api/auth',          authRoutes);
+app.use('/api/products',      productRoutes);
+app.use('/api/messages',      messageRoutes);
+app.use('/api/shops',         shopRoutes);
+app.use('/api/queries',       queryRoutes);
+app.use('/api/cart',          cartRoutes);
 app.use('/api/orders',        orderRoutes);
 app.use('/api/giveaways',     giveawayRoutes);
 app.use('/api/notifications', notificationRoutes);

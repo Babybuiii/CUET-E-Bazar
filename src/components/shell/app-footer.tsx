@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth";
 import {
   Mail,
   ChevronUp,
@@ -161,6 +162,8 @@ const MODAL_CONTENT: Record<NonNullable<ModalTopic>, { title: string; subtitle: 
 };
 
 export function AppFooter() {
+  const { user } = useAuth();
+  const isShopOwner = user?.role === "shop_owner";
   const [activeTopic, setActiveTopic] = useState<ModalTopic>(null);
 
   const scrollToTop = () => {
@@ -278,62 +281,64 @@ export function AppFooter() {
             </ul>
           </div>
 
-          {/* Column 3: Campus Categories */}
-          <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-              Popular Categories
-            </p>
-            <ul className="space-y-2 text-xs">
-              <li>
-                <Link
-                  href="/marketplace?category=Electronics+%26+Gadgets"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Electronics &amp; Gadgets
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/marketplace?category=Drawing+%26+Lab+Instruments"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Drawing &amp; Lab Kits
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/marketplace?search=calculator"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Scientific Calculators
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/marketplace?category=Books+%26+Study+Material"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Books &amp; Study Notes
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/marketplace?category=Bicycles+%26+Sports"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Campus Bicycles &amp; Sports
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/giveaways"
-                  className="hover:text-brand-emerald hover:underline transition text-emerald-600 dark:text-emerald-400 font-semibold"
-                >
-                  Free Giveaways
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {/* Column 3: Campus Categories - student browsing only */}
+          {!isShopOwner && (
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                Popular Categories
+              </p>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <Link
+                    href="/marketplace?category=Electronics+%26+Gadgets"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Electronics &amp; Gadgets
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/marketplace?category=Drawing+%26+Lab+Instruments"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Drawing &amp; Lab Kits
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/marketplace?search=calculator"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Scientific Calculators
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/marketplace?category=Books+%26+Study+Material"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Books &amp; Study Notes
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/marketplace?category=Bicycles+%26+Sports"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Campus Bicycles &amp; Sports
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/giveaways"
+                    className="hover:text-brand-emerald hover:underline transition text-emerald-600 dark:text-emerald-400 font-semibold"
+                  >
+                    Free Giveaways
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          )}
 
           {/* Column 4: Community & Resources */}
           <div className="space-y-3">
@@ -341,14 +346,16 @@ export function AppFooter() {
               Campus Resources
             </p>
             <ul className="space-y-2 text-xs">
-              <li>
-                <Link
-                  href="/shops"
-                  className="hover:text-brand-emerald hover:underline transition"
-                >
-                  Campus Shops &amp; Cafes
-                </Link>
-              </li>
+              {!isShopOwner && (
+                <li>
+                  <Link
+                    href="/shops"
+                    className="hover:text-brand-emerald hover:underline transition"
+                  >
+                    Campus Shops &amp; Cafes
+                  </Link>
+                </li>
+              )}
               <li>
                 <a
                   href="https://www.facebook.com"
