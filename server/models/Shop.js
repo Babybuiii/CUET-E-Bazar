@@ -130,7 +130,9 @@ shopSchema.pre('save', function (next) {
 });
 
 // ── Indexes ─────────────────────────────────────────────────────────────────
-shopSchema.index({ owner: 1 });
+// One shop per owner. User emails are already unique, so this is what enforces
+// "one shop per email" at the database level.
+shopSchema.index({ owner: 1 }, { unique: true });
 shopSchema.index({ category: 1 });
 shopSchema.index({ rating: -1 });
 

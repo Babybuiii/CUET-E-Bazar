@@ -4,6 +4,7 @@ const { Conversation, Message } = require('../models/Message');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const { authenticate } = require('../middleware/auth');
+const { notifyOther } = require('../utils/notify');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GET /api/messages/conversations - List all conversations for authenticated user
@@ -116,6 +117,19 @@ router.post('/start', authenticate, async (req, res) => {
       await conversation.save();
     }
 
+    // Notify the recipient about the opening message
+    if (initialText) {
+      await notifyOther({
+        recipient: recipientId,
+        actor: req.user._id,
+        type: 'new_message',
+        title: `New message from ${req.user.fullName}`,
+        message: initialText,
+        linkType: 'conversation',
+        linkId: conversation._id
+      });
+    }
+
     return res.json({
       success: true,
       conversation
@@ -211,6 +225,20 @@ router.post('/:conversationId', authenticate, async (req, res) => {
 
     const populatedMessage = await Message.findById(message._id)
       .populate('sender', 'fullName userId avatarUrl');
+
+    // Notify the other participant
+    const recipientId = conversation.participants.find(
+      (pId) => pId.toString() !== req.user._id.toString()
+    );
+    await notifyOther({
+      recipient: recipientId,
+      actor: req.user._id,
+      type: 'new_message',
+      title: `New message from ${req.user.fullName}`,
+      message: text.trim(),
+      linkType: 'conversation',
+      linkId: conversation._id
+    });
 
     return res.status(201).json({
       success: true,

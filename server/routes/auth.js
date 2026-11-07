@@ -131,6 +131,16 @@ router.post('/register', async (req, res) => {
           message: 'A shop with this name already exists. Please choose a different name.'
         });
       }
+
+      // One shop per email. The duplicate-email check above already blocks a
+      // second account, but an email that somehow owns a shop must not get another.
+      const ownerHasShop = await Shop.findOne({ email: email.toLowerCase() });
+      if (ownerHasShop) {
+        return res.status(400).json({
+          success: false,
+          message: 'A shop is already registered with this email address.'
+        });
+      }
     }
 
     // ── Hash password ────────────────────────────────────────────────────────

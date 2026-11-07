@@ -8,6 +8,7 @@ import { Logo } from "@/components/shared/logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { CartDrawer } from "@/components/cart/cart-drawer";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { fetchCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 
@@ -109,7 +110,8 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const router = useRouter();
-  const { isLoggedIn, logout } = useAuth();
+  const { isLoggedIn, user, logout } = useAuth();
+  const isShopOwner = user?.role === "shop_owner";
 
   useEffect(() => {
     const updateCount = async () => {
@@ -216,13 +218,17 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
         <div className="hidden md:flex mx-auto max-w-[1500px] items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70 shrink-0">
-              <Logo href={isLoggedIn ? "/home" : "/"} />
+              <Logo href={!isLoggedIn ? "/" : isShopOwner ? "/my-shop" : "/home"} />
             </div>
           </div>
 
-          <Suspense fallback={<HeaderSearchFallback />}>
-            <HeaderSearchBar />
-          </Suspense>
+          {isShopOwner ? (
+            <div className="flex-1" />
+          ) : (
+            <Suspense fallback={<HeaderSearchFallback />}>
+              <HeaderSearchBar />
+            </Suspense>
+          )}
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Cart Icon button */}
@@ -251,9 +257,7 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
                   <span className="hidden xs:inline sm:inline">Sell</span>
                 </button>
 
-                <button className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Notifications">
-                  <Bell size={17} />
-                </button>
+                <NotificationBell />
                 <Link href="/messages" className="focus-ring hidden md:inline-flex rounded-sm p-1.5 hover:outline hover:outline-1 hover:outline-white/70" aria-label="Messages">
                   <MessageCircle size={17} />
                 </Link>

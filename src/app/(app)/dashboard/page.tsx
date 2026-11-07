@@ -16,12 +16,16 @@ import {
   LogIn,
   RefreshCw,
   Heart,
-  Users
+  Users,
+  Edit3,
+  Trash2,
+  Loader2
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
+import { EditProductModal } from "@/components/marketplace/edit-product-modal";
 import { API_BASE_URL } from "@/lib/api";
 
 type ProductAnalytics = {
@@ -85,6 +89,8 @@ export default function SellerDashboardPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSellOpen, setIsSellOpen] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductAnalytics | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -168,6 +174,32 @@ export default function SellerDashboardPage() {
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  const handleDeleteProduct = async (productId: string, title: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
+    if (!token) return;
+    if (!window.confirm(`Delete "${title}"? This removes the listing and its photos permanently.`)) {
+      return;
+    }
+
+    try {
+      setDeletingId(productId);
+      const res = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchDashboardData();
+      } else {
+        console.error("Delete failed:", data.message);
+      }
+    } catch (err) {
+      console.error("Failed to delete product:", err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleToggleStatus = async (productId: string, newStatus: "active" | "sold" | "reserved") => {
     const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
@@ -408,12 +440,15 @@ export default function SellerDashboardPage() {
               Breakdown of ad clicks, student wishlist saves, and active inventory status
             </p>
           </div>
-          <Link
-            href="/my-listings"
-            className="text-xs font-semibold text-brand-emerald hover:underline inline-flex items-center gap-1 shrink-0"
-          >
-            Manage All Listings ({products.length}) <ArrowRight size={13} />
-          </Link>
+          {/* Shop owners have no Listings page - they manage products here */}
+          {user?.role !== "shop_owner" && (
+            <Link
+              href="/my-listings"
+              className="text-xs font-semibold text-brand-emerald hover:underline inline-flex items-center gap-1 shrink-0"
+            >
+              Manage All Listings ({products.length}) <ArrowRight size={13} />
+            </Link>
+          )}
         </div>
 
         {loading ? (
@@ -563,6 +598,21 @@ export default function SellerDashboardPage() {
                       >
                         <ExternalLink size={12} /> View Ad
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => setEditingProduct(item)}
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1"
+                      >
+                        <Edit3 size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(item._id, item.title)}
+                        disabled={deletingId === item._id}
+                        className="w-full rounded-lg border border-rose-200 dark:border-rose-900/60 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 inline-flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        {deletingId === item._id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
+                      </button>
                     </div>
                   </div>
                 );
@@ -707,6 +757,21 @@ export default function SellerDashboardPage() {
                             >
                               <ExternalLink size={10} /> View
                             </Link>
+                            <button
+                              type="button"
+                              onClick={() => setEditingProduct(item)}
+                              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-0.5"
+                            >
+                              <Edit3 size={10} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProduct(item._id, item.title)}
+                              disabled={deletingId === item._id}
+                              className="rounded border border-rose-200 dark:border-rose-900/60 px-2 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 inline-flex items-center gap-0.5 disabled:opacity-50"
+                            >
+                              {deletingId === item._id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />} Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -723,6 +788,16 @@ export default function SellerDashboardPage() {
         isOpen={isSellOpen}
         onClose={() => setIsSellOpen(false)}
         onSuccess={() => fetchDashboardData()}
+      />
+
+      <EditProductModal
+        isOpen={Boolean(editingProduct)}
+        product={editingProduct}
+        onClose={() => setEditingProduct(null)}
+        onUpdated={() => {
+          setEditingProduct(null);
+          fetchDashboardData();
+        }}
       />
     </div>
   );

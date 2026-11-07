@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -28,6 +28,7 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ShopImagePicker } from "@/components/shops/shop-image-picker";
 import { API_BASE_URL } from "@/lib/api";
 import { clearAuthSession } from "@/lib/auth";
 
@@ -78,7 +79,35 @@ type UserProfile = {
   createdAt?: string;
 };
 
-type TabType = "profile" | "security" | "notifications";
+type TabType = "profile" | "shop" | "security" | "notifications";
+
+type ShopDetails = {
+  _id: string;
+  shopName: string;
+  slug: string;
+  category: string;
+  description: string;
+  location: string;
+  contactNumber: string;
+  email: string;
+  operatingHours?: { open: string; close: string };
+  logoUrl?: string;
+  bannerUrl?: string;
+  isVerified?: boolean;
+};
+
+// Keep in sync with SHOP_CATEGORIES in src/app/(auth)/signup/page.tsx
+const SHOP_CATEGORIES = [
+  "General Store & Grocery",
+  "Stationery & Photocopy",
+  "Electronics & Accessories",
+  "Food, Snacks & Cafeteria",
+  "Clothing & Tailoring",
+  "Books & Academic Resources",
+  "Pharmacy & Personal Care",
+  "Gadget Repair & Services",
+  "Others"
+];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -122,8 +151,46 @@ export default function SettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Shop Form State (shop owners only)
+  const [shop, setShop] = useState<ShopDetails | null>(null);
+  const [shopName, setShopName] = useState("");
+  const [shopCategory, setShopCategory] = useState(SHOP_CATEGORIES[0]);
+  const [shopDescription, setShopDescription] = useState("");
+  const [shopLocation, setShopLocation] = useState("");
+  const [shopContact, setShopContact] = useState("");
+  const [shopEmail, setShopEmail] = useState("");
+  const [openTime, setOpenTime] = useState("09:00");
+  const [closeTime, setCloseTime] = useState("21:00");
+  const [savingShop, setSavingShop] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState<"logo" | "banner" | null>(null);
+  const [shopStatus, setShopStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [prefStatus, setPrefStatus] = useState<string | null>(null);
+
+  // ── Load the owner's shop once we know the role ──
+  const loadShop = useCallback(async (authToken: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/shops/my-shop`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.shop) {
+        const s: ShopDetails = data.shop;
+        setShop(s);
+        setShopName(s.shopName || "");
+        setShopCategory(s.category || SHOP_CATEGORIES[0]);
+        setShopDescription(s.description || "");
+        setShopLocation(s.location || "");
+        setShopContact(s.contactNumber || "");
+        setShopEmail(s.email || "");
+        setOpenTime(s.operatingHours?.open || "09:00");
+        setCloseTime(s.operatingHours?.close || "21:00");
+      }
+    } catch {
+      // Shop panel simply stays hidden if this fails
+    }
+  }, []);
 
   // Fetch initial profile and constants
   useEffect(() => {
@@ -188,6 +255,10 @@ export default function SettingsPage() {
             setHall(u.hall || "");
             setAvatarUrl(u.avatarUrl || "");
             localStorage.setItem("cuet_ebazar_user", JSON.stringify(u));
+
+            if (u.role === "shop_owner") {
+              await loadShop(storedToken);
+            }
           }
         } else {
           // Token expired or invalid
@@ -228,9 +299,131 @@ export default function SettingsPage() {
 
     window.addEventListener("auth-changed", handleAuthChange);
     return () => window.removeEventListener("auth-changed", handleAuthChange);
-  }, []);
+  }, [loadShop]);
 
-  // Handle Profile Update
+  // Upload or replace the shop logo / cover photo
+  const uploadShopImage = async (kind: "logo" | "banner", file: File) => {
+    if (!token) return;
+    setShopStatus(null);
+    setUploadingImage(kind);
+    try {
+      const body = new FormData();
+      body.append(kind, file);
+      const res = await fetch(`${API_BASE_URL}/api/shops/my-shop/images`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body
+      });
+      // A stale API server answers with an HTML 404, so never assume JSON
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setShop(data.shop);
+        setShopStatus({
+          type: "success",
+          message: kind === "logo" ? "Shop logo updated!" : "Cover photo updated!"
+        });
+      } else if (res.status === 404) {
+        setShopStatus({
+          type: "error",
+          message:
+            "Image upload endpoint not found. Restart the API server (npm run dev in the server folder) to load it."
+        });
+      } else {
+        setShopStatus({
+          type: "error",
+          message: data?.message || `Failed to upload image (HTTP ${res.status}).`
+        });
+      }
+    } catch {
+      setShopStatus({ type: "error", message: "Could not reach the server to upload the image." });
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
+  const removeShopImage = async (kind: "logo" | "banner") => {
+    if (!token) return;
+    setShopStatus(null);
+    setUploadingImage(kind);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/shops/my-shop/images/${kind}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        setShop(data.shop);
+        setShopStatus({ type: "success", message: data.message });
+      } else if (res.status === 404) {
+        setShopStatus({
+          type: "error",
+          message:
+            "Image endpoint not found. Restart the API server (npm run dev in the server folder) to load it."
+        });
+      } else {
+        setShopStatus({
+          type: "error",
+          message: data?.message || `Failed to remove image (HTTP ${res.status}).`
+        });
+      }
+    } catch {
+      setShopStatus({ type: "error", message: "Could not reach the server to remove the image." });
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
+  // Handle Shop Details Update
+  const handleSaveShop = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShopStatus(null);
+
+    if (!token) {
+      setShopStatus({ type: "error", message: "You must be logged in to update your shop." });
+      return;
+    }
+    if (!shopName.trim() || shopName.trim().length < 2) {
+      setShopStatus({ type: "error", message: "Shop name must be at least 2 characters." });
+      return;
+    }
+    if (shopContact.trim() && !/^(\+?880|0)1[3-9]\d{8}$/.test(shopContact.trim())) {
+      setShopStatus({ type: "error", message: "Please enter a valid Bangladeshi mobile number." });
+      return;
+    }
+
+    try {
+      setSavingShop(true);
+      const res = await fetch(`${API_BASE_URL}/api/shops/my-shop`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          shopName: shopName.trim(),
+          category: shopCategory,
+          description: shopDescription.trim(),
+          location: shopLocation.trim(),
+          contactNumber: shopContact.trim(),
+          email: shopEmail.trim(),
+          operatingHours: { open: openTime, close: closeTime }
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setShop(data.shop);
+        setShopStatus({ type: "success", message: data.message || "Shop details updated successfully!" });
+      } else {
+        setShopStatus({ type: "error", message: data.message || "Failed to update shop details." });
+      }
+    } catch {
+      setShopStatus({ type: "error", message: "Could not reach the server. Is the API running on port 5000?" });
+    } finally {
+      setSavingShop(false);
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileStatus(null);
@@ -479,6 +672,19 @@ export default function SettingsPage() {
         >
           <User size={16} /> Profile Information
         </button>
+
+        {user?.role === "shop_owner" && (
+          <button
+            onClick={() => setActiveTab("shop")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition whitespace-nowrap ${
+              activeTab === "shop"
+                ? "bg-brand-emerald text-white shadow-sm"
+                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 border border-slate-200 dark:border-slate-700"
+            }`}
+          >
+            <Building2 size={16} /> Shop Details
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab("security")}
@@ -752,6 +958,233 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════════
+          TAB: SHOP DETAILS (shop owners only)
+         ══════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === "shop" && user?.role === "shop_owner" && (
+        <div className="grid gap-6 lg:grid-cols-[2fr_1.2fr]">
+          <Card>
+            <div className="flex items-center gap-2">
+              <Building2 size={18} className="text-brand-emerald" />
+              <h2 className="font-display text-lg font-bold">Shop Details</h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              These details appear on your public shop page and on every product you list.
+            </p>
+
+            {shopStatus && (
+              <div
+                className={`mt-4 flex items-center gap-2 rounded-xl border p-3 text-sm ${
+                  shopStatus.type === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                }`}
+              >
+                {shopStatus.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                <span>{shopStatus.message}</span>
+              </div>
+            )}
+
+            {!shop ? (
+              <div className="mt-6 rounded-xl border border-dashed border-slate-300 p-6 text-center dark:border-slate-600">
+                <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
+                <p className="text-sm font-semibold">No shop linked to this account</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  A shop is created automatically when you register as a shop owner.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveShop} className="mt-6 space-y-4">
+                {/* ── Logo & cover photo ── */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">Shop Branding</p>
+                  <div className="flex flex-col gap-4 sm:flex-row">
+                    <div className="shrink-0">
+                      <ShopImagePicker
+                        kind="logo"
+                        url={shop.logoUrl}
+                        busy={uploadingImage === "logo"}
+                        onSelect={(f) => uploadShopImage("logo", f)}
+                        onRemove={() => removeShopImage("logo")}
+                        onError={(m) => setShopStatus({ type: "error", message: m })}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <ShopImagePicker
+                        kind="banner"
+                        url={shop.bannerUrl}
+                        busy={uploadingImage === "banner"}
+                        onSelect={(f) => uploadShopImage("banner", f)}
+                        onRemove={() => removeShopImage("banner")}
+                        onError={(m) => setShopStatus({ type: "error", message: m })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Shop Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={shopName}
+                    onChange={(e) => setShopName(e.target.value)}
+                    placeholder="e.g. CUET Gadget Hub"
+                    required
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Shop Category
+                  </label>
+                  <select
+                    value={shopCategory}
+                    onChange={(e) => setShopCategory(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    {[...new Set([shopCategory, ...SHOP_CATEGORIES])].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Shop Description (Max 400 characters)
+                  </label>
+                  <textarea
+                    value={shopDescription}
+                    onChange={(e) => setShopDescription(e.target.value.slice(0, 400))}
+                    placeholder="e.g. Affordable gadgets, accessories and repair services for CUET students."
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <p className="mt-1 text-right text-[11px] text-slate-400">{shopDescription.length}/400 chars</p>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Shop Location
+                  </label>
+                  <input
+                    type="text"
+                    value={shopLocation}
+                    onChange={(e) => setShopLocation(e.target.value)}
+                    placeholder="e.g. CUET Central Cafeteria Area"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Shop Contact Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={shopContact}
+                      onChange={(e) => setShopContact(e.target.value)}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Business Email
+                    </label>
+                    <input
+                      type="email"
+                      value={shopEmail}
+                      onChange={(e) => setShopEmail(e.target.value)}
+                      placeholder="shop@example.com"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Opening Time
+                    </label>
+                    <input
+                      type="time"
+                      value={openTime}
+                      onChange={(e) => setOpenTime(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Closing Time
+                    </label>
+                    <input
+                      type="time"
+                      value={closeTime}
+                      onChange={(e) => setCloseTime(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={savingShop} className="w-full sm:w-auto">
+                  {savingShop ? (
+                    <>
+                      <Loader2 size={16} className="mr-2 animate-spin" /> Saving Shop...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} className="mr-2" /> Save Shop Details
+                    </>
+                  )}
+                </Button>
+              </form>
+            )}
+          </Card>
+
+          {/* Side panel: shop summary */}
+          <Card className="h-fit">
+            <h3 className="font-display text-base font-bold">Shop Summary</h3>
+            {shop ? (
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Status</span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      shop.isVerified
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : "bg-amber-500/10 text-amber-600"
+                    }`}
+                  >
+                    <BadgeCheck size={12} /> {shop.isVerified ? "Verified" : "Pending review"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Public URL</span>
+                  <Link href={`/shops/${shop.slug || shop._id}`} className="font-semibold text-brand-emerald hover:underline">
+                    /shops/{shop.slug}
+                  </Link>
+                </div>
+                <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <Link href="/my-shop" className="text-xs font-semibold text-brand-emerald hover:underline">
+                    Go to shop overview →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                No shop information available.
+              </p>
+            )}
           </Card>
         </div>
       )}
