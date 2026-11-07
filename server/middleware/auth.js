@@ -27,8 +27,33 @@ const authenticate = async (req, res, next) => {
     if (user.isBanned) {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been suspended by campus moderators.'
+        message: `Your account has been permanently banned by platform administrators. Reason: ${user.banReason || 'Violation of community guidelines.'}`
       });
+    }
+
+    if (user.isSuspended) {
+      if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
+        const untilStr = new Date(user.suspendedUntil).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+        return res.status(403).json({
+          success: false,
+          message: `Your account is temporarily suspended until ${untilStr}. Reason: ${user.suspensionReason || 'Policy violation.'}`
+        });
+      } else if (user.suspendedUntil && new Date(user.suspendedUntil) <= new Date()) {
+        // Automatic lift of expired suspension
+        user.isSuspended = false;
+        user.suspendedUntil = null;
+        user.suspensionReason = '';
+        await user.save();
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: `Your account is temporarily suspended. Reason: ${user.suspensionReason || 'Under moderation review.'}`
+        });
+      }
     }
 
     req.user = user;
@@ -41,4 +66,14 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate };
+const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Administrator privileges required.'
+    });
+  }
+  next();
+};
+
+module.exports = { authenticate, requireAdmin };

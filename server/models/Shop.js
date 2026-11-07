@@ -79,6 +79,31 @@ const shopSchema = new mongoose.Schema(
       default: false
     },
 
+    isSuspended: {
+      type: Boolean,
+      default: false
+    },
+
+    suspendedUntil: {
+      type: Date,
+      default: null
+    },
+
+    suspensionReason: {
+      type: String,
+      default: ''
+    },
+
+    isDisabled: {
+      type: Boolean,
+      default: false
+    },
+
+    isHidden: {
+      type: Boolean,
+      default: false
+    },
+
     // ── Availability ──────────────────────────────────────────────────────────────────────
     isOpen: {
       type: Boolean,

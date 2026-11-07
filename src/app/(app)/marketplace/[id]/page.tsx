@@ -23,11 +23,13 @@ import {
   Plus,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  Flag
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProductPhotoZoomModal } from "@/components/marketplace/product-photo-zoom-modal";
+import { ReportModal } from "@/components/shared/report-modal";
 import { API_BASE_URL } from "@/lib/api";
 import { getAuthToken, useAuth } from "@/lib/auth";
 import { isWishlistedLocally, toggleWishlist } from "@/lib/wishlist";
@@ -162,6 +164,7 @@ export default function ProductDetailsPage() {
   const [stagePan, setStagePan] = useState({ x: 0, y: 0 });
   const [isSaved, setIsSaved] = useState(false);
   const [addedToast, setAddedToast] = useState<string | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   const lastRecordedViewIdRef = useRef<string | null>(null);
 
   // Public Queries / Comments state
@@ -762,6 +765,15 @@ export default function ProductDetailsPage() {
                 >
                   <Share2 size={16} />
                 </Button>
+
+                <Button
+                  variant="ghost"
+                  className={`border border-slate-200 dark:border-slate-700 ${isShopProduct ? "py-5" : "py-6"} px-4 hover:bg-red-50 text-slate-500 hover:text-red-600 dark:hover:bg-red-950/40`}
+                  onClick={() => setReportModalOpen(true)}
+                  title="Report Scam or Fake Ad"
+                >
+                  <Flag size={16} />
+                </Button>
               </div>
             </div>
 
@@ -1030,6 +1042,15 @@ export default function ProductDetailsPage() {
         images={images}
         initialIndex={activeImageIndex}
         productTitle={product.title}
+      />
+
+      {/* Student Abuse & Scam Reporting Modal */}
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        targetType="product"
+        targetId={product._id}
+        targetTitle={product.title}
       />
     </div>
   );

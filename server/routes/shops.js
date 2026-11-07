@@ -555,7 +555,12 @@ router.delete('/owner/products/:id', authenticate, async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { category, search, sort = 'newest', limit = 50 } = req.query;
-    const filter = { isBanned: { $ne: true } };
+    const filter = {
+      isBanned: { $ne: true },
+      isSuspended: { $ne: true },
+      isDisabled: { $ne: true },
+      isHidden: { $ne: true }
+    };
 
     if (category && category !== 'All') {
       filter.category = { $regex: new RegExp(`^${category.trim()}$`, 'i') };

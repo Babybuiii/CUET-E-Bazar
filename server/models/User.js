@@ -199,6 +199,21 @@ const userSchema = new mongoose.Schema(
       default: ''
     },
 
+    isSuspended: {
+      type: Boolean,
+      default: false
+    },
+
+    suspendedUntil: {
+      type: Date,
+      default: null
+    },
+
+    suspensionReason: {
+      type: String,
+      default: ''
+    },
+
     warnings: [warningSchema],
 
     // ── Wishlist ─────────────────────────────────────────────────────────────

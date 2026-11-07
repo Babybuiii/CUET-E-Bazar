@@ -63,6 +63,11 @@ const reportSchema = new mongoose.Schema(
       default: ''
     },
 
+    actionTaken: {
+      type: String,
+      default: ''
+    },
+
     resolvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

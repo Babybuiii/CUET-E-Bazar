@@ -18,6 +18,8 @@ const cartRoutes     = require('./routes/cart');
 const orderRoutes        = require('./routes/orders');
 const giveawayRoutes     = require('./routes/giveaways');
 const notificationRoutes = require('./routes/notifications');
+const reportRoutes       = require('./routes/reports');
+const adminRoutes        = require('./routes/admin');
 
 const { startGiveawayScheduler } = require('./jobs/giveawayScheduler');
 
@@ -43,6 +45,8 @@ app.use('/api/cart',          cartRoutes);
 app.use('/api/orders',        orderRoutes);
 app.use('/api/giveaways',     giveawayRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports',       reportRoutes);
+app.use('/api/admin',         adminRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

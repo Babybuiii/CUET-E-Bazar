@@ -12,6 +12,7 @@ import {
   X
 } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
+import { ReportModal } from "@/components/shared/report-modal";
 
 type ModalTopic = "about" | "terms" | "privacy" | "billing" | "candidate" | "cookie" | "copyright" | "safety" | "faq" | null;
 
@@ -165,6 +166,7 @@ export function AppFooter() {
   const { user } = useAuth();
   const isShopOwner = user?.role === "shop_owner";
   const [activeTopic, setActiveTopic] = useState<ModalTopic>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -271,12 +273,12 @@ export function AppFooter() {
                 </button>
               </li>
               <li>
-                <Link
-                  href="/messages"
-                  className="hover:text-brand-emerald hover:underline transition text-rose-600 dark:text-rose-400 font-medium"
+                <button
+                  onClick={() => setIsReportOpen(true)}
+                  className="hover:text-brand-emerald hover:underline transition text-rose-600 dark:text-rose-400 font-medium text-left"
                 >
                   Report Scam or Fake Ad
-                </Link>
+                </button>
               </li>
             </ul>
           </div>
@@ -439,6 +441,13 @@ export function AppFooter() {
           </div>
         </div>
       )}
+      {/* ── Student Scam & Abuse Report Modal ── */}
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        targetType="user"
+        targetTitle="Scam or Platform Abuse"
+      />
     </footer>
   );
 }

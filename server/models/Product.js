@@ -150,8 +150,13 @@ const productSchema = new mongoose.Schema(
     // ── Status & Location ───────────────────────────────────────────────────
     status: {
       type: String,
-      enum: ['active', 'sold', 'reserved', 'removed_by_admin'],
+      enum: ['active', 'sold', 'reserved', 'removed_by_admin', 'hidden'],
       default: 'active'
+    },
+
+    adminNotes: {
+      type: String,
+      default: ''
     },
 
     location: {

@@ -224,6 +224,25 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    if (user.isSuspended) {
+      if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
+        const untilStr = new Date(user.suspendedUntil).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+        return res.status(403).json({
+          success: false,
+          message: `Your account is temporarily suspended until ${untilStr}. Reason: ${user.suspensionReason || 'Policy violation.'}`
+        });
+      } else if (user.suspendedUntil && new Date(user.suspendedUntil) <= new Date()) {
+        user.isSuspended = false;
+        user.suspendedUntil = null;
+        user.suspensionReason = '';
+        await user.save();
+      }
+    }
+
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
@@ -308,6 +327,30 @@ router.post('/firebase-sync', async (req, res) => {
         return res.status(403).json({
           success: false,
           message: `Your account has been banned. Reason: ${user.banReason || 'Contact admin for details.'}`
+        });
+      }
+      if (user.isSuspended) {
+        if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
+          const untilStr = new Date(user.suspendedUntil).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+          return res.status(403).json({
+            success: false,
+            message: `Your account is temporarily suspended until ${untilStr}. Reason: ${user.suspensionReason || 'Policy violation.'}`
+          });
+        } else if (user.suspendedUntil && new Date(user.suspendedUntil) <= new Date()) {
+          user.isSuspended = false;
+          user.suspendedUntil = null;
+          user.suspensionReason = '';
+        }
+      }
+      if (role && user.role !== role) {
+        const portalNames = { student: 'Student', shop_owner: 'Shop Owner', admin: 'Admin' };
+        return res.status(403).json({
+          success: false,
+          message: `This account is registered as "${portalNames[user.role] || user.role}". Please use the correct login portal.`
         });
       }
       if ((user.role === 'student' || user.role === 'admin') && !user.isVerified) {
