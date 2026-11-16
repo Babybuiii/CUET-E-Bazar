@@ -3,7 +3,7 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
-const isRealValue = (v) => Boolean(v && typeof v === 'string' && v.trim() && !v.includes('your_') && !v.includes('<') && v !== 'yycr5ehf');
+const isRealValue = (v) => Boolean(v && typeof v === 'string' && v.trim() && !v.includes('your_') && !v.includes('<'));
 
 const rawCloud = process.env.CLOUDINARY_CLOUD_NAME;
 const rawKey   = process.env.CLOUDINARY_API_KEY;

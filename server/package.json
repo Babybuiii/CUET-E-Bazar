@@ -7,7 +7,8 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "clear:db": "node scripts/clear-all-data.js",
-    "seed:admin": "node scripts/seed-admin.js"
+    "seed:admin": "node scripts/seed-admin.js",
+    "migrate:images": "node scripts/migrate-base64-to-cloudinary.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -59,8 +59,7 @@ function ProductImage({ src, alt, priority }: { src: string; alt: string; priori
  alt={alt}
  fill
  priority={priority}
- quality={95}
- unoptimized={src.includes("cloudinary.com")}
+ quality={80}
  sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
  loading={priority ? "eager" : "lazy"}
  className="object-contain p-2 transition duration-300 group-hover:scale-105 select-none"
@@ -100,7 +99,7 @@ export function ProductCard({ product, priority }: { product: Product; priority?
  const firstImage = product.images?.[0];
  let displayImage =
  typeof firstImage === "object"
- ? (firstImage.url || firstImage.thumbnailUrl)
+ ? (firstImage.thumbnailUrl || firstImage.url)
  : typeof firstImage === "string"
  ? firstImage
  : product.image ||
@@ -108,8 +107,8 @@ export function ProductCard({ product, priority }: { product: Product; priority?
 
  // Upgrade any legacy Cloudinary transformations to high-res (1200px, q_auto:best)
  if (displayImage.includes("res.cloudinary.com")) {
- displayImage = displayImage.replace(/c_fill,w_\d+,h_\d+,q_[^/]+,f_[^/]+/, "c_limit,w_1200,q_auto:best,f_auto");
- displayImage = displayImage.replace(/c_limit,w_\d+,h_\d+/, "c_limit,w_1200,q_auto:best,f_auto");
+ displayImage = displayImage.replace(/c_fill,w_\d+,h_\d+,q_[^/]+,f_[^/]+/, "c_limit,w_500,q_auto,f_auto");
+ displayImage = displayImage.replace(/c_limit,w_\d+,h_\d+/, "c_limit,w_500,q_auto,f_auto");
  }
 
  // Derive real rating from product or seller (null if unrated)

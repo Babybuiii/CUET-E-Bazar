@@ -6,11 +6,11 @@ const User = require('../models/User');
 const { upload, cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
 const { authenticate } = require('../middleware/auth');
 
-// Helper to generate a fast, uncropped optimized thumbnail URL from Cloudinary URL
+// Helper to generate a fast, optimized thumbnail URL from Cloudinary URL
 function makeThumbnailUrl(url) {
   if (!url || typeof url !== 'string') return '';
   if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
-    return url.replace('/upload/', '/upload/c_limit,w_1200,q_auto:best,f_auto/');
+    return url.replace('/upload/', '/upload/c_limit,w_600,q_auto,f_auto/');
   }
   return url;
 }
