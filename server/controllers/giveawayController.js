@@ -10,6 +10,7 @@
  */
 
 const mongoose = require('mongoose');
+const User = require('../models/User');
 const Giveaway = require('../models/Giveaway');
 const Notification = require('../models/Notification');
 const { Conversation, Message } = require('../models/Message');
@@ -573,6 +574,166 @@ const getMyClaims = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. POST /api/giveaways/:id/unclaim
+//    Claimant unclaims item, or donor/admin returns claimed item to available
+// ─────────────────────────────────────────────────────────────────────────────
+const unclaimGiveaway = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid giveaway ID.' });
+    }
+
+    const giveaway = await Giveaway.findById(id)
+      .populate('donor', 'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified');
+
+    if (!giveaway) {
+      return res.status(404).json({ success: false, message: 'Giveaway not found.' });
+    }
+
+    if (giveaway.status !== 'claimed' || !giveaway.selectedUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'This giveaway is not currently in a claimed state.'
+      });
+    }
+
+    const donorId = (giveaway.donor?._id || giveaway.donor).toString();
+    const claimantId = (giveaway.selectedUser?._id || giveaway.selectedUser).toString();
+    const isDonor = userId === donorId;
+    const isClaimant = userId === claimantId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isDonor && !isClaimant && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the claimant or the donor can unclaim this giveaway.'
+      });
+    }
+
+    const previousClaimant = giveaway.selectedUser;
+
+    giveaway.status = 'available';
+    giveaway.selectedUser = null;
+    giveaway.claimedAt = null;
+    if (giveaway.claimedCount > 0) {
+      giveaway.claimedCount -= 1;
+    }
+    await giveaway.save();
+
+    // Notify the other party
+    try {
+      if (isClaimant) {
+        await Notification.create({
+          recipient: donorId,
+          type: 'giveaway_update',
+          title: 'Giveaway Unclaimed',
+          message: `${previousClaimant?.fullName || 'The claimant'} has released their claim on "${giveaway.title}". The item is available again.`,
+          linkType: 'giveaway',
+          linkId: giveaway._id,
+          metadata: { giveawayId: giveaway._id, giveawayTitle: giveaway.title }
+        });
+      } else {
+        await Notification.create({
+          recipient: claimantId,
+          type: 'giveaway_update',
+          title: 'Giveaway Returned to Available',
+          message: `The giveaway "${giveaway.title}" was marked as unclaimed by the owner and returned to available.`,
+          linkType: 'giveaway',
+          linkId: giveaway._id,
+          metadata: { giveawayId: giveaway._id, giveawayTitle: giveaway.title }
+        });
+      }
+    } catch (notifErr) {
+      console.warn('Notification on unclaim failed:', notifErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: isClaimant ? 'You have successfully unclaimed this item.' : 'Giveaway marked as unclaimed.',
+      giveaway
+    });
+  } catch (err) {
+    console.error('unclaimGiveaway error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to unclaim giveaway.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. POST /api/giveaways/:id/mark-given-away
+//     Donor or admin marks the claimed item as given away
+// ─────────────────────────────────────────────────────────────────────────────
+const markGivenAway = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid giveaway ID.' });
+    }
+
+    const giveaway = await Giveaway.findById(id)
+      .populate('donor', 'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified');
+
+    if (!giveaway) {
+      return res.status(404).json({ success: false, message: 'Giveaway not found.' });
+    }
+
+    const donorId = (giveaway.donor?._id || giveaway.donor).toString();
+    const isDonor = userId === donorId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isDonor && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the donor can mark this giveaway as given away.'
+      });
+    }
+
+    giveaway.status = 'given_away';
+    await giveaway.save();
+
+    // Increment donor totalGiveaways
+    try {
+      await User.findByIdAndUpdate(donorId, { $inc: { totalGiveaways: 1 } });
+    } catch (uErr) {
+      console.warn('Failed to increment totalGiveaways:', uErr.message);
+    }
+
+    // Notify claimant if exists
+    if (giveaway.selectedUser) {
+      const claimantId = (giveaway.selectedUser._id || giveaway.selectedUser).toString();
+      try {
+        await Notification.create({
+          recipient: claimantId,
+          type: 'giveaway_update',
+          title: 'Giveaway Completed',
+          message: `The donor marked "${giveaway.title}" as given away. Thank you!`,
+          linkType: 'giveaway',
+          linkId: giveaway._id,
+          metadata: { giveawayId: giveaway._id, giveawayTitle: giveaway.title }
+        });
+      } catch (notifErr) {
+        console.warn('Notification on mark given away failed:', notifErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Giveaway marked as given away successfully!',
+      giveaway
+    });
+  } catch (err) {
+    console.error('markGivenAway error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update giveaway status.' });
+  }
+};
+
 module.exports = {
   getGiveaways,
   getGiveawayById,
@@ -581,5 +742,7 @@ module.exports = {
   initiateContact,
   cancelGiveaway,
   getMyGiveaways,
-  getMyClaims
+  getMyClaims,
+  unclaimGiveaway,
+  markGivenAway
 };

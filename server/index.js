@@ -73,12 +73,12 @@ mongoose.connect(MONGO_URI)
     startGiveawayScheduler();
   })
   .catch((err) => {
-    console.error(`❌ MongoDB Connection Error: ${err.message}`);
+    console.error(`MongoDB Connection Error: ${err.message}`);
     if (err.message.includes('Authentication failed') || err.message.includes('bad auth')) {
-      console.error('💡 Tip: Verify database username & password in MongoDB Atlas -> Security -> Database Access, and ensure MONGO_URI in Render environment variables has no quotes or angle brackets.');
+      console.error('Tip: Verify database username & password in MongoDB Atlas -> Security -> Database Access, and ensure MONGO_URI in Render environment variables has no quotes or angle brackets.');
     }
   });
 
 app.listen(PORT, () => {
-  console.log(`🚀 CUET e-bazar MERN Server listening on http://localhost:${PORT}`);
+  console.log(`CUET e-bazar MERN Server listening on http://localhost:${PORT}`);
 });

@@ -185,70 +185,42 @@ export default function AdminDashboardPage() {
         </Button>
       </div>
 
-      {/* ── 1. Overview Cards ── */}
+      {/* ── 1. Overview Cards (Clean, Solid, Brand Themed) ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Students */}
-        <Card className="p-5 flex items-center justify-between border-slate-200/80 dark:border-slate-700/80 hover:shadow-md transition">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Students
-            </p>
-            <p className="mt-1.5 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
-              {stats.totalStudents.toLocaleString()}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Registered campus buyers & sellers</p>
-          </div>
-          <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <Users className="text-brand-emerald" size={24} />
-          </div>
+        <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Students</p>
+          <p className="mt-1.5 font-display text-3xl font-bold text-slate-900 dark:text-white">
+            {stats.totalStudents.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Registered campus students</p>
         </Card>
 
         {/* Total Sellers */}
-        <Card className="p-5 flex items-center justify-between border-slate-200/80 dark:border-slate-700/80 hover:shadow-md transition">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Sellers
-            </p>
-            <p className="mt-1.5 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
-              {stats.totalSellers.toLocaleString()}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Verified campus shops & businesses</p>
-          </div>
-          <div className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-            <Store className="text-amber-500" size={24} />
-          </div>
+        <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Sellers</p>
+          <p className="mt-1.5 font-display text-3xl font-bold text-slate-900 dark:text-white">
+            {stats.totalSellers.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Verified campus shops</p>
         </Card>
 
         {/* Total Products */}
-        <Card className="p-5 flex items-center justify-between border-slate-200/80 dark:border-slate-700/80 hover:shadow-md transition">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Products
-            </p>
-            <p className="mt-1.5 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
-              {stats.totalProducts.toLocaleString()}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Marketplace listings across campus</p>
-          </div>
-          <div className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-            <Package className="text-blue-500" size={24} />
-          </div>
+        <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Products</p>
+          <p className="mt-1.5 font-display text-3xl font-bold text-slate-900 dark:text-white">
+            {stats.totalProducts.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Marketplace listings</p>
         </Card>
 
         {/* Total Orders */}
-        <Card className="p-5 flex items-center justify-between border-slate-200/80 dark:border-slate-700/80 hover:shadow-md transition">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total Orders
-            </p>
-            <p className="mt-1.5 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
-              {stats.totalOrders.toLocaleString()}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Transactions processed on platform</p>
-          </div>
-          <div className="h-12 w-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
-            <ShoppingBag className="text-purple-500" size={24} />
-          </div>
+        <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Orders</p>
+          <p className="mt-1.5 font-display text-3xl font-bold text-slate-900 dark:text-white">
+            {stats.totalOrders.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Processed platform orders</p>
         </Card>
       </div>
 

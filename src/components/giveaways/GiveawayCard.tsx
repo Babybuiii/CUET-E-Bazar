@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import {
@@ -8,13 +7,10 @@ import {
   MapPin,
   Clock,
   User,
-  Users,
   Tag,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
-  Trash2,
-  MessageSquare
+  AlertCircle
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { Giveaway } from "@/types/giveaway";
@@ -33,169 +29,60 @@ function getTimeLeft(deadline: string): string {
   return `${m}m left`;
 }
 
-const conditionColors: Record<string, string> = {
-  New:        "bg-emerald-100 text-emerald-800 border-emerald-300",
-  "Like New": "bg-sky-100    text-sky-800    border-sky-300",
-  Good:       "bg-amber-100  text-amber-800  border-amber-300",
-  Fair:       "bg-orange-100 text-orange-800 border-orange-300"
-};
-
-// ── GiveawayCard ──────────────────────────────────────────────────────────────
 interface GiveawayCardProps {
   giveaway: Giveaway;
-  currentUserId?: string;
   onClaim: (giveaway: Giveaway) => void;
-  onUnpublish?: (giveaway: Giveaway) => void;
-  onMessage?: (giveaway: Giveaway) => void;
 }
 
 export function GiveawayCard({
   giveaway,
-  currentUserId,
-  onClaim,
-  onUnpublish,
-  onMessage
+  onClaim
 }: GiveawayCardProps) {
-  const [timeLeft, setTimeLeft] = useState(() => getTimeLeft(giveaway.deadline));
-
-  // Live countdown
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTimeLeft(getTimeLeft(giveaway.deadline));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [giveaway.deadline]);
-
-  const donorId = typeof giveaway.donor === "object" ? giveaway.donor?._id : giveaway.donor;
-  const isOwnGiveaway = Boolean(currentUserId && donorId && String(donorId) === String(currentUserId));
-
-  const claimantId = typeof giveaway.selectedUser === "object" ? giveaway.selectedUser?._id : giveaway.selectedUser;
-  const isClaimant = Boolean(currentUserId && claimantId && String(claimantId) === String(currentUserId));
-
   const displayImage = giveaway.images?.[0] || null;
+  const timeLeft = getTimeLeft(giveaway.deadline);
 
-  // ── Status config (FCFS) ──────────────────────────────────────────────────
-  const statusConfig = {
+  // Status configuration (constant for all viewers)
+  const statusConfig: Record<string, { label: string; dot: string; textColor: string; bgColor: string }> = {
     available: {
-      label:    "Available",
-      dot:      "bg-emerald-500",
-      canClaim: true
+      label: "Available",
+      dot: "bg-emerald-500",
+      textColor: "text-emerald-700 dark:text-emerald-300",
+      bgColor: "bg-emerald-50 dark:bg-emerald-950/40"
     },
     claimed: {
-      label:    "Claimed",
-      dot:      "bg-slate-400",
-      canClaim: false
+      label: "Claimed",
+      dot: "bg-slate-400",
+      textColor: "text-slate-700 dark:text-slate-300",
+      bgColor: "bg-slate-100 dark:bg-slate-800"
+    },
+    given_away: {
+      label: "Given Away",
+      dot: "bg-brand-emerald",
+      textColor: "text-brand-emerald dark:text-teal-300",
+      bgColor: "bg-teal-50 dark:bg-teal-950/40"
     },
     expired: {
-      label:    "Expired",
-      dot:      "bg-red-400",
-      canClaim: false
+      label: "Expired",
+      dot: "bg-red-400",
+      textColor: "text-red-700 dark:text-red-300",
+      bgColor: "bg-red-50 dark:bg-red-950/40"
     },
     cancelled: {
-      label:    "Cancelled",
-      dot:      "bg-rose-400",
-      canClaim: false
+      label: "Cancelled",
+      dot: "bg-rose-400",
+      textColor: "text-rose-700 dark:text-rose-300",
+      bgColor: "bg-rose-50 dark:bg-rose-950/40"
     }
   };
 
   const sc = statusConfig[giveaway.status] ?? statusConfig.available;
 
-  // ── Action button ─────────────────────────────────────────────────────────
-  function renderActionButton() {
-    // 1. Available giveaway — not donor's: "Claim Item"
-    if (giveaway.status === "available" && !isOwnGiveaway) {
-      return (
-        <button
-          type="button"
-          onClick={() => onClaim(giveaway)}
-          className="w-full rounded-full bg-[#0f766e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0d665f] active:scale-95 shadow-sm"
-        >
-          Claim Item
-        </button>
-      );
-    }
-
-    // 2. Available giveaway — donor's own: "Unpublish Giveaway"
-    if (giveaway.status === "available" && isOwnGiveaway) {
-      return (
-        <button
-          type="button"
-          onClick={() => onUnpublish?.(giveaway)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 px-4 py-2 text-sm font-semibold transition"
-          title="Unpublish this giveaway"
-        >
-          <Trash2 size={14} />
-          <span>Unpublish Giveaway</span>
-        </button>
-      );
-    }
-
-    // 3. Claimed giveaway — logged-in user is the claimant: "Message Donor"
-    if (giveaway.status === "claimed" && isClaimant) {
-      return (
-        <button
-          type="button"
-          onClick={() => onMessage?.(giveaway)}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0f766e] hover:bg-[#0d665f] active:scale-95 text-white px-4 py-2 text-sm font-semibold shadow-sm transition"
-          title="Message Donor to coordinate pickup"
-        >
-          <MessageSquare size={15} />
-          <span>Message Donor</span>
-        </button>
-      );
-    }
-
-    // 4. Claimed giveaway — logged-in user is the donor: "Message Claimant"
-    if (giveaway.status === "claimed" && isOwnGiveaway) {
-      return (
-        <button
-          type="button"
-          onClick={() => onMessage?.(giveaway)}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0f766e] hover:bg-[#0d665f] active:scale-95 text-white px-4 py-2 text-sm font-semibold shadow-sm transition"
-          title="Message Claimant to coordinate pickup"
-        >
-          <MessageSquare size={15} />
-          <span>Message Claimant</span>
-        </button>
-      );
-    }
-
-    // 5. Claimed giveaway — other students: "Already Claimed"
-    if (giveaway.status === "claimed") {
-      return (
-        <div className="flex items-center justify-center gap-2 w-full rounded-full bg-slate-100 border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500">
-          <CheckCircle2 size={14} /> Already Claimed
-        </div>
-      );
-    }
-
-    // 6. Expired
-    if (giveaway.status === "expired") {
-      return (
-        <div className="flex items-center justify-center gap-2 w-full rounded-full bg-red-50 border border-red-200 px-4 py-2 text-sm font-semibold text-red-500">
-          <AlertTriangle size={14} /> Expired
-        </div>
-      );
-    }
-
-    // 7. Cancelled
-    if (giveaway.status === "cancelled") {
-      return (
-        <div className="flex items-center justify-center gap-2 w-full rounded-full bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-500">
-          <XCircle size={14} /> Cancelled
-        </div>
-      );
-    }
-
-    return null;
-  }
-
   return (
     <motion.div whileHover={{ y: -3 }} transition={{ duration: 0.2 }} className="h-full">
-      <Card className="group h-full flex flex-col p-0 overflow-hidden border border-slate-200 hover:shadow-md transition-shadow duration-200 bg-white">
+      <Card className="group h-full flex flex-col p-0 overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow duration-200">
 
-        {/* ── Image (16:9) ───────────────────────────────────────────────── */}
-        <div className="relative w-full overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100" style={{ aspectRatio: "16/9" }}>
+        {/* ── Image ───────────────────────────────────────────────────────── */}
+        <div className="relative w-full overflow-hidden bg-slate-100 dark:bg-slate-800" style={{ aspectRatio: "16/9" }}>
           {displayImage ? (
             <Image
               src={displayImage}
@@ -206,36 +93,29 @@ export function GiveawayCard({
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
-              <Gift size={48} />
-              <span className="mt-2 text-xs font-medium text-slate-400">No photo</span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
+              <Gift size={40} />
+              <span className="mt-1 text-xs font-medium text-slate-400">No photo</span>
             </div>
           )}
 
-          {/* FREE badge */}
-          <span className="absolute top-2 left-2 rounded-full bg-[#0f766e] px-2.5 py-0.5 text-[10px] font-extrabold text-white shadow-sm">
-            100% FREE
+          {/* 100% Free badge */}
+          <span className="absolute top-2 left-2 rounded-full bg-brand-emerald px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+            Free
           </span>
 
-          {/* Donor ownership badge */}
-          {isOwnGiveaway && (
-            <span className="absolute top-2 left-24 rounded-full bg-slate-900/75 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
-              Your Post
-            </span>
-          )}
-
           {/* Condition badge */}
-          <span className={`absolute top-2 right-2 rounded-full border px-2 py-0.5 text-[10px] font-bold ${conditionColors[giveaway.condition] || "bg-slate-100 text-slate-700 border-slate-300"}`}>
+          <span className="absolute top-2 right-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 shadow-sm">
             {giveaway.condition}
           </span>
 
-          {/* Time left badge (bottom) */}
-          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-            <Clock size={10} /> {timeLeft}
+          {/* Time left badge */}
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-slate-900/90 px-2 py-0.5 text-[11px] font-semibold text-white">
+            <Clock size={11} /> {timeLeft}
           </span>
 
-          {/* Status dot */}
-          <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-sm">
+          {/* Status badge */}
+          <span className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 shadow-sm border border-slate-200 dark:border-slate-700">
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${sc.dot}`} />
             {sc.label}
           </span>
@@ -245,103 +125,76 @@ export function GiveawayCard({
         <div className="flex flex-col flex-1 gap-2 p-3 sm:p-4">
 
           {/* Title */}
-          <h3 className="line-clamp-2 text-sm font-semibold text-slate-900 leading-snug">
+          <h2 className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-white leading-snug">
             {giveaway.title}
-          </h3>
+          </h2>
 
-          {/* Description */}
-          {giveaway.description && (
-            <p className="line-clamp-2 text-xs text-slate-500">
-              {giveaway.description}
-            </p>
-          )}
-
-          {/* Category & Claimed Count */}
-          <div className="flex items-center justify-between gap-1 text-xs text-slate-500">
+          {/* Category & Location */}
+          <div className="flex items-center justify-between gap-1 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1">
-              <Tag size={11} />
+              <Tag size={12} className="text-slate-400" />
               <span>{giveaway.category}</span>
             </div>
-            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
-              <Users size={11} className="text-slate-400" />
-              <span>
-                {giveaway.claimedCount && giveaway.claimedCount > 0
-                  ? `${giveaway.claimedCount} claimed`
-                  : "0 claimed"}
-              </span>
+            <div className="flex items-center gap-1 truncate">
+              <MapPin size={12} className="text-slate-400 shrink-0" />
+              <span className="truncate">{giveaway.location}</span>
             </div>
           </div>
 
           {/* Donor Profile */}
-          <div className="flex items-center gap-2 text-xs text-slate-600">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 border border-emerald-200">
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
               {giveaway.donor?.avatarUrl ? (
                 <Image
                   src={giveaway.donor.avatarUrl}
                   alt={giveaway.donor.fullName}
-                  width={24}
-                  height={24}
+                  width={20}
+                  height={20}
                   className="rounded-full object-cover"
                 />
               ) : (
-                <User size={12} className="text-emerald-600" />
+                <User size={10} className="text-slate-500" />
               )}
             </div>
-            <div className="min-w-0">
-              <p className="truncate font-medium text-slate-800">{giveaway.donor?.fullName || "Anonymous"}</p>
+            <div className="min-w-0 flex-1 truncate">
+              <span className="font-medium text-slate-800 dark:text-slate-200">{giveaway.donor?.fullName || "CUET Member"}</span>
               {giveaway.donor?.department && (
-                <p className="truncate text-[10px] text-slate-400">{giveaway.donor.department}</p>
+                <span className="text-[11px] text-slate-400 ml-1 truncate">({giveaway.donor.department})</span>
               )}
             </div>
           </div>
 
-          {/* Location & Pickup Spot */}
-          <div className="flex items-center gap-1 text-xs text-slate-500">
-            <MapPin size={11} className="shrink-0" />
-            <span className="truncate">
-              {giveaway.location}{giveaway.pickupSpot ? ` — ${giveaway.pickupSpot}` : ""}
-            </span>
-          </div>
-
-          {/* Claimant experience badge: "You Claimed This Item" */}
-          {giveaway.status === "claimed" && isClaimant && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200/80 px-2.5 py-1.5 text-xs text-emerald-800 font-semibold flex items-center gap-1.5">
-              <CheckCircle2 size={14} className="text-[#0f766e] shrink-0" />
-              <span>You Claimed This Item</span>
-            </div>
-          )}
-
-          {/* Donor's view: "Claimed By [Student Name]" with profile data */}
-          {giveaway.status === "claimed" && isOwnGiveaway && giveaway.selectedUser && (
-            <div className="rounded-xl bg-emerald-50/70 border border-emerald-200/70 p-2.5 space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Claimed By</p>
-              <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white border border-emerald-300">
-                  {giveaway.selectedUser.avatarUrl ? (
-                    <Image
-                      src={giveaway.selectedUser.avatarUrl}
-                      alt={giveaway.selectedUser.fullName}
-                      width={24}
-                      height={24}
-                      className="rounded-full object-cover"
-                    />
-                  ) : (
-                    <User size={12} className="text-emerald-700" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-slate-900">{giveaway.selectedUser.fullName}</p>
-                  {giveaway.selectedUser.department && (
-                    <p className="truncate text-[10px] text-slate-500">{giveaway.selectedUser.department}</p>
-                  )}
-                </div>
+          {/* Action Button & Status (Constant for all users) */}
+          <div className="mt-auto pt-3">
+            {giveaway.status === "available" ? (
+              <button
+                type="button"
+                onClick={() => onClaim(giveaway)}
+                className="w-full rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 active:scale-95 px-4 py-2 text-xs font-semibold text-white transition shadow-sm"
+              >
+                Claim Item
+              </button>
+            ) : giveaway.status === "claimed" ? (
+              <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <CheckCircle2 size={13} className="text-slate-500" />
+                <span>Claimed</span>
               </div>
-            </div>
-          )}
-
-          {/* Action button pinned to bottom */}
-          <div className="mt-auto pt-2">
-            {renderActionButton()}
+            ) : giveaway.status === "given_away" ? (
+              <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 px-3 py-2 text-xs font-semibold text-brand-emerald dark:text-teal-300">
+                <CheckCircle2 size={13} className="text-brand-emerald" />
+                <span>Given Away</span>
+              </div>
+            ) : giveaway.status === "expired" ? (
+              <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                <AlertCircle size={13} />
+                <span>Expired</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                <XCircle size={13} />
+                <span>Cancelled</span>
+              </div>
+            )}
           </div>
         </div>
       </Card>

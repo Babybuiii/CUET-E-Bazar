@@ -147,7 +147,7 @@ export function OfferGiveawayModal({ isOpen, onClose, onSuccess }: OfferGiveaway
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           initial="hidden" animate="visible" exit="hidden" variants={backdrop}
         >
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
+          <div className="absolute inset-0 bg-black/60" onClick={handleClose} />
 
           <motion.div
             className="relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto"
@@ -348,8 +348,9 @@ export function OfferGiveawayModal({ isOpen, onClose, onSuccess }: OfferGiveaway
                 )}
 
                 {/* Info callout */}
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3.5 py-3 text-xs text-emerald-800">
-                  🎁 Your item is 100% free — no price, no payment, no shipping. Campus pickup only.
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3.5 py-3 text-xs text-emerald-800">
+                  <Gift size={16} className="text-brand-emerald shrink-0" />
+                  <span>Giveaway items are 100% free for the campus community — no price, payment, or shipping fees.</span>
                 </div>
 
                 {/* Submit */}

@@ -56,7 +56,7 @@ function HeaderSearchBar({ className = "" }: { className?: string }) {
         onChange={(e) => setSearchTerm(e.target.value)}
         aria-label="Search products"
         placeholder="Search products..."
-        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent"
+        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent placeholder:text-slate-600 text-slate-900"
       />
       {searchTerm && (
         <button
@@ -90,7 +90,7 @@ function HeaderSearchFallback({ className = "" }: { className?: string }) {
       <input
         aria-label="Search products"
         placeholder="Search products..."
-        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent"
+        className="w-full min-w-0 border-0 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm outline-none bg-transparent placeholder:text-slate-600 text-slate-900"
         disabled
       />
       <div className="h-full bg-[#febd69] px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[#0f1111] shrink-0 flex items-center justify-center">
@@ -109,9 +109,14 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
   const [isSellOpen, setIsSellOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const { isLoggedIn, user, logout } = useAuth();
   const isShopOwner = user?.role === "shop_owner";
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const updateCount = async () => {
@@ -167,7 +172,7 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
               <Menu size={18} />
             </button>
             <div className="shrink-0 flex items-center">
-              <Logo href={isLoggedIn ? "/home" : "/"} iconOnly />
+              <Logo href="/" iconOnly />
             </div>
           </div>
 
@@ -178,11 +183,16 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
             </Suspense>
           </div>
 
-          {/* Right: Messages, Cart, Dark mode toggle - EXACT SAME SIZE (h-8.5 w-8.5) & NO Logout button (Moved to Sidebar) */}
+          {/* Right: Notifications, Messages, Cart, Dark mode toggle */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {mounted && isLoggedIn && (
+              <NotificationDropdown
+                buttonClassName="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
+              />
+            )}
             {/* Messages button */}
             <Link
-              href={isLoggedIn ? "/messages" : "/login?redirect=messages"}
+              href={mounted && isLoggedIn ? "/messages" : "/login?redirect=messages"}
               className="h-8.5 w-8.5 rounded-lg flex items-center justify-center text-white bg-white/10 hover:bg-white/20 active:scale-95 transition relative shrink-0"
               aria-label="Messages"
               title="Messages"
@@ -218,17 +228,13 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
         <div className="hidden md:flex mx-auto max-w-[1500px] items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-sm px-2 py-1 hover:outline hover:outline-1 hover:outline-white/70 shrink-0">
-              <Logo href={!isLoggedIn ? "/" : isShopOwner ? "/my-shop" : "/home"} />
+              <Logo href="/" />
             </div>
           </div>
 
-          {isShopOwner ? (
-            <div className="flex-1" />
-          ) : (
-            <Suspense fallback={<HeaderSearchFallback />}>
-              <HeaderSearchBar />
-            </Suspense>
-          )}
+          <Suspense fallback={<HeaderSearchFallback />}>
+            <HeaderSearchBar />
+          </Suspense>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Cart Icon button */}
@@ -246,7 +252,7 @@ export function AppHeader({ onOpenSidebar, onOpenSell }: AppHeaderProps = {}) {
               )}
             </button>
 
-            {isLoggedIn ? (
+            {mounted && isLoggedIn ? (
               <>
                 <button
                   onClick={handleSellClick}

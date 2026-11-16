@@ -45,8 +45,22 @@ a {
   text-decoration: none;
 }
 
+p, h1, h2, h3, h4, h5, h6 {
+  text-wrap: pretty;
+}
+
+input, textarea {
+  caret-color: #0f766e;
+}
+
 ::selection {
-  background: rgba(254, 189, 105, 0.35);
+  background: rgba(15, 118, 110, 0.25);
+  color: #0f1111;
+}
+
+.dark ::selection {
+  background: rgba(45, 212, 191, 0.3);
+  color: #ffffff;
 }
 
 .focus-ring {
@@ -54,11 +68,11 @@ a {
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(15, 17, 17, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
 }
 
 .dark .glass {
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #0f172a;
+  border: 1px solid #334155;
 }

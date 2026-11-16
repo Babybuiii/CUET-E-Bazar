@@ -71,7 +71,8 @@ export default function AdminLoginPage() {
       setSuccess("Admin authenticated. Redirecting to admin panel...");
       setTimeout(() => {
         router.push("/admin");
-      }, 1000);
+        router.refresh();
+      }, 400);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to log in.";
       setError(message);
@@ -85,10 +86,14 @@ export default function AdminLoginPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <Card className="glass p-6 sm:p-8 border-red-500/20">
           <div className="flex items-center justify-between">
-            <Logo href="/" />
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400 px-2.5 py-1 rounded-full">
-              <Shield size={13} /> Admin Portal
-            </span>
+            <Logo
+              href="/"
+              portalBadge={
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0 border border-red-500/20">
+                  <Shield size={11} /> Admin Portal
+                </span>
+              }
+            />
           </div>
 
           <h1 className="mt-6 font-display text-2xl sm:text-3xl font-bold">Admin Login</h1>

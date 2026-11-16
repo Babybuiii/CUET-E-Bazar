@@ -127,11 +127,11 @@ const giveawaySchema = new mongoose.Schema(
       min: 0
     },
 
-    // ── Status (FCFS: available -> claimed, expired, or cancelled) ────────
+    // ── Status (FCFS: available -> claimed, given_away, expired, or cancelled) ────────
     status: {
       type: String,
       enum: {
-        values: ['available', 'claimed', 'expired', 'cancelled'],
+        values: ['available', 'claimed', 'given_away', 'expired', 'cancelled'],
         message: '{VALUE} is not a valid giveaway status'
       },
       default: 'available'

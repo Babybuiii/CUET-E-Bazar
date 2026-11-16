@@ -307,7 +307,7 @@ export default function ShopDetailsPage() {
       {/* Hero Banner & Store Header Card */}
       <Card className="overflow-hidden p-0 border border-slate-200 dark:border-slate-800 shadow-sm">
         {/* Cover Photo */}
-        <div className="relative h-44 sm:h-56 w-full bg-gradient-to-r from-teal-900 to-slate-900 overflow-hidden">
+        <div className="relative h-44 sm:h-56 w-full bg-gradient-to-r from-emerald-950 via-teal-900 to-[#131921] overflow-hidden">
           {hasBanner ? (
             <Image
               src={shop.bannerUrl!}
@@ -318,7 +318,7 @@ export default function ShopDetailsPage() {
               className="object-cover"
             />
           ) : (
-            <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-teal-800 to-slate-900 text-white/20">
+            <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-emerald-900/80 to-[#131921] text-white/20">
               <Store size={64} />
             </div>
           )}
@@ -522,7 +522,7 @@ export default function ShopDetailsPage() {
                         )}
 
                         {/* Condition Badge */}
-                        <span className="absolute top-2.5 left-2.5 rounded-md bg-black/60 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white uppercase">
+                        <span className="absolute top-2.5 left-2.5 rounded-md bg-slate-900/85 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
                           {product.condition}
                         </span>
 

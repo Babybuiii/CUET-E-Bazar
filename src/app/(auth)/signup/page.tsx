@@ -245,7 +245,7 @@ export default function SignupPage() {
       );
 
       setTimeout(() => {
-        router.push(role === "shop_owner" ? "/dashboard" : "/home");
+        router.push(role === "shop_owner" ? "/dashboard" : "/");
       }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to connect to registration server.";
@@ -260,7 +260,7 @@ export default function SignupPage() {
       <Card className="p-6 sm:p-8">
         <div className="flex items-center justify-between">
           <Logo href="/" />
-          <span className="text-xs font-semibold text-brand-emerald bg-brand-emerald/10 px-2.5 py-1 rounded-full">
+          <span className="text-xs font-semibold text-brand-emerald dark:text-emerald-300 bg-brand-emerald/10 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full">
             CUET Official E-Bazar
           </span>
         </div>
@@ -757,7 +757,7 @@ export default function SignupPage() {
 
         <p className="mt-6 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
           Already have an account?{" "}
-          <Link href="/login" className="font-semibold text-brand-emerald hover:underline">
+          <Link href="/login" className="font-semibold text-brand-emerald dark:text-emerald-400 hover:underline">
             Log in here
           </Link>
         </p>

@@ -230,7 +230,7 @@ export default function AdminAnalyticsPage() {
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">New Signups ({period})</p>
-                <p className="text-2xl font-extrabold text-purple-600 mt-1">
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
                   {data.userAnalytics.usersOverTime.reduce((sum, u) => sum + u.count, 0)}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">Growth in current period</p>
@@ -243,7 +243,7 @@ export default function AdminAnalyticsPage() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                   New Registrations Timeline
                 </h3>
-                {renderTrendChart(data.userAnalytics.usersOverTime, "bg-emerald-500")}
+                {renderTrendChart(data.userAnalytics.usersOverTime, "bg-brand-emerald")}
               </Card>
 
               {/* Department Distribution */}
@@ -284,7 +284,7 @@ export default function AdminAnalyticsPage() {
           {/* ═════════════════════════════════════════════════════════════════════ */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-              <Package className="text-blue-500" size={20} />
+              <Package className="text-brand-emerald" size={20} />
               <h2 className="text-base font-bold text-slate-900 dark:text-white">B. Marketplace Analytics</h2>
             </div>
 
@@ -299,7 +299,7 @@ export default function AdminAnalyticsPage() {
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Currently Active Listings</p>
-                <p className="text-2xl font-extrabold text-emerald-600 mt-1">
+                <p className="text-2xl font-extrabold text-brand-emerald mt-1">
                   {data.marketplaceAnalytics.activeProducts.toLocaleString()}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">Live on campus marketplace</p>
@@ -307,7 +307,7 @@ export default function AdminAnalyticsPage() {
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Products Sold</p>
-                <p className="text-2xl font-extrabold text-blue-600 mt-1">
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
                   {data.marketplaceAnalytics.soldProducts.toLocaleString()}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">Successfully traded</p>
@@ -320,7 +320,7 @@ export default function AdminAnalyticsPage() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                   Listings Created Timeline
                 </h3>
-                {renderTrendChart(data.marketplaceAnalytics.productsOverTime, "bg-blue-500")}
+                {renderTrendChart(data.marketplaceAnalytics.productsOverTime, "bg-brand-emerald")}
               </Card>
 
               {/* Category Distribution */}
@@ -339,7 +339,7 @@ export default function AdminAnalyticsPage() {
                           <span>{cat.count} ({percent}%)</span>
                         </div>
                         <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div style={{ width: `${percent}%` }} className="h-full bg-blue-500 rounded-full" />
+                          <div style={{ width: `${percent}%` }} className="h-full bg-brand-emerald rounded-full" />
                         </div>
                       </div>
                     );
@@ -354,7 +354,7 @@ export default function AdminAnalyticsPage() {
           {/* ═════════════════════════════════════════════════════════════════════ */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-              <ShoppingBag className="text-purple-500" size={20} />
+              <ShoppingBag className="text-brand-emerald" size={20} />
               <h2 className="text-base font-bold text-slate-900 dark:text-white">C. Order Analytics</h2>
             </div>
 
@@ -368,21 +368,21 @@ export default function AdminAnalyticsPage() {
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Completed Orders</p>
-                <p className="text-2xl font-extrabold text-emerald-600 mt-1">
+                <p className="text-2xl font-extrabold text-brand-emerald mt-1">
                   {data.orderAnalytics.completedOrders.toLocaleString()}
                 </p>
               </Card>
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Pending Orders</p>
-                <p className="text-2xl font-extrabold text-amber-600 mt-1">
+                <p className="text-2xl font-extrabold text-brand-orange mt-1">
                   {data.orderAnalytics.pendingOrders.toLocaleString()}
                 </p>
               </Card>
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Cancelled Orders</p>
-                <p className="text-2xl font-extrabold text-rose-600 mt-1">
+                <p className="text-2xl font-extrabold text-slate-500 mt-1">
                   {data.orderAnalytics.cancelledOrders.toLocaleString()}
                 </p>
               </Card>
@@ -393,7 +393,7 @@ export default function AdminAnalyticsPage() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Order Activity Timeline
               </h3>
-              {renderTrendChart(data.orderAnalytics.ordersOverTime, "bg-purple-500")}
+              {renderTrendChart(data.orderAnalytics.ordersOverTime, "bg-brand-emerald")}
             </Card>
           </div>
 
@@ -402,7 +402,7 @@ export default function AdminAnalyticsPage() {
           {/* ═════════════════════════════════════════════════════════════════════ */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-              <Store className="text-amber-500" size={20} />
+              <Store className="text-brand-emerald" size={20} />
               <h2 className="text-base font-bold text-slate-900 dark:text-white">D. Seller Analytics</h2>
             </div>
 
@@ -416,14 +416,14 @@ export default function AdminAnalyticsPage() {
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Active Directory Shops</p>
-                <p className="text-2xl font-extrabold text-amber-600 mt-1">
+                <p className="text-2xl font-extrabold text-brand-emerald mt-1">
                   {data.sellerAnalytics.activeShops.toLocaleString()}
                 </p>
               </Card>
 
               <Card className="p-4 border-slate-200/80 dark:border-slate-700/80">
                 <p className="text-xs text-slate-500 font-semibold uppercase">Total Shop Products</p>
-                <p className="text-2xl font-extrabold text-indigo-600 mt-1">
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
                   {data.sellerAnalytics.totalShopProducts.toLocaleString()}
                 </p>
               </Card>

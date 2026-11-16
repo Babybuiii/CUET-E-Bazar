@@ -440,7 +440,7 @@ export default function ProductDetailsPage() {
                   e.stopPropagation();
                   setIsZoomModalOpen(true);
                 }}
-                className="focus-ring absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-black/65 hover:bg-black/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md transition border border-white/20 shadow-lg hover:scale-105"
+                className="focus-ring absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full bg-slate-900/90 hover:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition border border-white/20 shadow-lg hover:scale-105"
                 title="Inspect Photo (Zoom Lightbox Mode)"
               >
                 <ZoomIn size={14} className="text-emerald-400" />
@@ -450,7 +450,7 @@ export default function ProductDetailsPage() {
               {/* In-Stage Zoom Toolbar */}
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-3 left-3 z-20 flex items-center gap-1 bg-black/65 backdrop-blur-md rounded-full px-2 py-1 border border-white/15 shadow-lg"
+                className="absolute bottom-3 left-3 z-20 flex items-center gap-1 bg-slate-900/90 rounded-full px-2 py-1 border border-white/15 shadow-lg"
               >
                 <button
                   type="button"

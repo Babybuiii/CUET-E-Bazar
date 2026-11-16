@@ -95,7 +95,7 @@ export function ShopPublicView({
     <div className="space-y-5">
       {/* ── Shop header ── */}
       <Card className="glass overflow-hidden p-0">
-        <div className="h-24 w-full bg-gradient-to-r from-brand-emerald/90 to-sky-500/80 sm:h-32">
+        <div className="h-24 w-full bg-gradient-to-r from-emerald-900 via-teal-900 to-[#131921] sm:h-32">
           {shop.bannerUrl && (
             <Image
               src={shop.bannerUrl}

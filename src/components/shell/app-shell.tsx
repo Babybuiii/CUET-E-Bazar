@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AppHeader } from "@/components/shell/app-header";
@@ -14,9 +14,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { isLoggedIn, user } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeNavLinks = getNavLinks(user?.role);
-  const links = isLoggedIn ? activeNavLinks : PUBLIC_NAV_LINKS;
+  const links = mounted && isLoggedIn ? activeNavLinks : PUBLIC_NAV_LINKS;
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -52,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   }`}
                 >
                   {active && (
-                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-300 shadow-sm" />
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300 shadow-sm" />
                   )}
                   <span>{item.name}</span>
                 </Link>

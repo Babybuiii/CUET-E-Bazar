@@ -32,7 +32,6 @@ export function MobileBottomNav({ onOpenSell }: MobileBottomNavProps) {
   const isGiveawaysActive = pathname === "/giveaways" || pathname.startsWith("/giveaways/");
   const isDashboardActive =
     pathname === "/dashboard" ||
-    pathname === "/my-dashboard" ||
     pathname === "/my-listings" ||
     pathname === "/my-orders";
 
@@ -44,7 +43,7 @@ export function MobileBottomNav({ onOpenSell }: MobileBottomNavProps) {
       <div className="grid grid-cols-5 items-center h-14 max-w-lg mx-auto px-1">
         {/* 1. Home */}
         <Link
-          href={isLoggedIn ? "/home" : "/"}
+          href="/"
           className={`flex flex-col items-center justify-center py-1 transition-colors ${
             isHomeActive
               ? "text-brand-emerald font-bold"

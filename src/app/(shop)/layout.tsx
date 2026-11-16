@@ -45,12 +45,19 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
     }
     if (user && user.role !== "shop_owner" && user.role !== "admin") {
       // Redirect non-owners to student portal
-      router.replace("/home");
+      router.replace("/");
     }
   }, [isLoggedIn, user, loading, router]);
 
-  // ── Fetch unread notification count ────────────────────────────────────────
+  // ── Fetch unread notification count & trigger device notification ─────────────
   useEffect(() => {
+    const seenIds = new Set<string>();
+    let initialRun = true;
+
+    if (typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "default") {
+      window.Notification.requestPermission().catch(() => {});
+    }
+
     const fetchUnread = async () => {
       const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
       if (!token) return;
@@ -59,17 +66,40 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
-        if (data.success) setUnreadCount(data.unreadCount || 0);
+        if (data.success) {
+          setUnreadCount(data.unreadCount || 0);
+
+          const list = data.notifications || [];
+          if (!initialRun && typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "granted") {
+            list.forEach((n: any) => {
+              if (!n.isRead && !seenIds.has(n._id)) {
+                try {
+                  const notif = new window.Notification(n.title, {
+                    body: n.message,
+                    icon: "/ebazar.png"
+                  });
+                  notif.onclick = () => {
+                    window.focus();
+                    router.push("/shop-portal/orders");
+                  };
+                } catch {}
+              }
+            });
+          }
+
+          list.forEach((n: any) => seenIds.add(n._id));
+          initialRun = false;
+        }
       } catch {}
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 60000);
+    const interval = setInterval(fetchUnread, 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [router]);
 
   const handleLogout = () => {
     clearAuthSession();
-    router.push("/shop-portal/login");
+    window.location.href = "/shop-portal/login";
   };
 
   if (loading) {
@@ -99,25 +129,29 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
 
       {/* ── Sidebar ── */}
       <aside
+        style={{ backgroundColor: "#232f3e" }}
         className={cn(
-          "fixed inset-y-0 left-0 z-30 w-64 flex flex-col bg-[#232f3e] text-white transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-30 w-64 shrink-0 flex flex-col bg-[#232f3e] text-white transition-transform duration-300 lg:static lg:translate-x-0 lg:z-auto",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo Area */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#131921]">
-          <Logo href="/shop-portal/dashboard" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
-              Shop Portal
-            </span>
-            <button
-              className="lg:hidden text-white/60 hover:text-white"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X size={18} />
-            </button>
-          </div>
+        <div className="flex items-center justify-between px-3.5 py-3 border-b border-white/10 bg-[#131921]">
+          <Logo
+            href="/shop-portal/dashboard"
+            portalBadge={
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 whitespace-nowrap shrink-0">
+                Shop Portal
+              </span>
+            }
+          />
+          <button
+            className="lg:hidden text-white/60 hover:text-white p-1"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close sidebar"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Owner Info */}

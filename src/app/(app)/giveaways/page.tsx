@@ -17,8 +17,7 @@ import { Button } from "@/components/ui/button";
 import { GiveawayCard } from "@/components/giveaways/GiveawayCard";
 import { OfferGiveawayModal } from "@/components/giveaways/OfferGiveawayModal";
 import { ClaimConfirmationModal } from "@/components/giveaways/ClaimConfirmationModal";
-import { UnpublishConfirmationModal } from "@/components/giveaways/UnpublishConfirmationModal";
-import { useGiveaways, initiateContact } from "@/hooks/useGiveaways";
+import { useGiveaways } from "@/hooks/useGiveaways";
 import { useAuth } from "@/lib/auth";
 import {
   GIVEAWAY_CATEGORIES,
@@ -63,16 +62,14 @@ export default function GiveawaysPage() {
   });
 
   // ── Modal state ───────────────────────────────────────────────────────────
-  const [offerOpen,      setOfferOpen]      = useState(false);
-  const [claimItem,      setClaimItem]      = useState<Giveaway | null>(null);
-  const [claimOpen,      setClaimOpen]      = useState(false);
-  const [unpublishItem,  setUnpublishItem]  = useState<Giveaway | null>(null);
-  const [unpublishOpen,  setUnpublishOpen]  = useState(false);
-  const [toastMessage,   setToastMessage]   = useState<string | null>(null);
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [claimItem, setClaimItem] = useState<Giveaway | null>(null);
+  const [claimOpen, setClaimOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   function openClaimModal(giveaway: Giveaway) {
     if (!isLoggedIn) {
-      alert("Please log in to claim a giveaway.");
+      router.push("/login");
       return;
     }
     setClaimItem(giveaway);
@@ -84,39 +81,8 @@ export default function GiveawaysPage() {
       updateGiveawayLocally(claimedGiveaway);
     }
     refetch();
-    setToastMessage("Congratulations! You claimed this item. Click 'Message Donor' to arrange pickup.");
+    setToastMessage("Congratulations! You claimed this item. Manage it from your Dashboard.");
     setTimeout(() => setToastMessage(null), 4500);
-  }
-
-  function openUnpublishModal(giveaway: Giveaway) {
-    setUnpublishItem(giveaway);
-    setUnpublishOpen(true);
-  }
-
-  function handleUnpublishSuccess(giveawayId: string) {
-    removeGiveaway(giveawayId);
-    refetch();
-    setToastMessage("Giveaway unpublished successfully.");
-    setTimeout(() => setToastMessage(null), 3500);
-  }
-
-  async function handleOpenMessage(giveaway: Giveaway) {
-    if (!isLoggedIn) {
-      router.push("/login");
-      return;
-    }
-    try {
-      const res = await initiateContact(giveaway._id);
-      if (res.success && res.conversationId) {
-        router.push(`/messages?conversationId=${res.conversationId}`);
-      } else {
-        setToastMessage(res.message || "Failed to open conversation.");
-        setTimeout(() => setToastMessage(null), 3500);
-      }
-    } catch (err: any) {
-      setToastMessage(err?.message || "Failed to open conversation.");
-      setTimeout(() => setToastMessage(null), 3500);
-    }
   }
 
   // ── Category chip helper ──────────────────────────────────────────────────
@@ -136,18 +102,19 @@ export default function GiveawaysPage() {
         <div className="mb-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
-                Giveaways 🎁
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl flex items-center gap-2.5">
+                <Gift className="text-brand-emerald" size={28} />
+                <span>Giveaways</span>
               </h1>
-              <p className="mt-1 max-w-xl text-sm text-slate-500">
-                Find something useful. Give something back. Everything is 100% free for the CUET community.
+              <p className="mt-1 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+                Community giveaways for CUETians. Claim available items or share resources with your campus.
               </p>
             </div>
 
             {isLoggedIn && (
               <Button
                 onClick={() => setOfferOpen(true)}
-                className="shrink-0 flex items-center gap-2 rounded-full px-5"
+                className="shrink-0 flex items-center gap-2 rounded-xl px-5"
               >
                 <Plus size={16} />
                 Offer a Giveaway
@@ -165,7 +132,7 @@ export default function GiveawaysPage() {
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search giveaways…"
-                className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:border-[#0f766e] focus:outline-none focus:ring-2 focus:ring-[#0f766e]/20 transition"
+                className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm focus:border-[#0f766e] focus:outline-none focus:ring-2 focus:ring-[#0f766e]/20 transition placeholder:text-slate-600 text-slate-900"
               />
             </div>
 
@@ -259,10 +226,7 @@ export default function GiveawaysPage() {
                 >
                   <GiveawayCard
                     giveaway={g}
-                    currentUserId={(user as any)?._id || (user as any)?.id}
                     onClaim={openClaimModal}
-                    onUnpublish={openUnpublishModal}
-                    onMessage={handleOpenMessage}
                   />
                 </motion.div>
               ))}
@@ -283,14 +247,6 @@ export default function GiveawaysPage() {
         isOpen={claimOpen}
         onClose={() => { setClaimOpen(false); setClaimItem(null); }}
         onSuccess={handleClaimSuccess}
-        onMessage={handleOpenMessage}
-      />
-
-      <UnpublishConfirmationModal
-        giveaway={unpublishItem}
-        isOpen={unpublishOpen}
-        onClose={() => { setUnpublishOpen(false); setUnpublishItem(null); }}
-        onSuccess={handleUnpublishSuccess}
       />
 
       {/* ── Feedback Toast Alert ────────────────────────────────────────────── */}

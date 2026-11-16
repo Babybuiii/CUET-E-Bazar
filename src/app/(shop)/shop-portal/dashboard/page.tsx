@@ -119,10 +119,10 @@ export default function ShopDashboardPage() {
     new Date(d).toLocaleDateString("en-BD", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
   const statCards = [
-    { label: "Total Orders", value: stats.totalOrders, icon: ShoppingBag, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/40" },
-    { label: "Pending Orders", value: stats.pendingOrders, icon: Clock, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/40" },
-    { label: "Completed Orders", value: stats.completedOrders, icon: CheckCircle2, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/40" },
-    { label: "Total Items Sold", value: stats.totalItemsSold, icon: TrendingUp, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/40" },
+    { label: "Total Orders", value: stats.totalOrders },
+    { label: "Pending Orders", value: stats.pendingOrders },
+    { label: "Completed Orders", value: stats.completedOrders },
+    { label: "Total Items Sold", value: stats.totalItemsSold }
   ];
 
   if (loading) {
@@ -161,22 +161,12 @@ export default function ShopDashboardPage() {
 
       {/* ── Summary Stats ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card key={card.label} className="p-4 sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">{card.label}</p>
-                  <p className={`mt-1.5 text-2xl font-bold font-display ${card.color}`}>{card.value}</p>
-                </div>
-                <div className={`p-2 rounded-xl ${card.bg} shrink-0`}>
-                  <Icon size={18} className={card.color} />
-                </div>
-              </div>
-            </Card>
-          );
-        })}
+        {statCards.map((card) => (
+          <Card key={card.label} className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">{card.label}</p>
+            <p className="mt-1.5 text-2xl font-bold font-display text-slate-900 dark:text-white">{card.value}</p>
+          </Card>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

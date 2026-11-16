@@ -110,7 +110,7 @@ export default function MyShopPage() {
             <RefreshCw size={15} className="mr-1.5" /> Retry
           </Button>
           {/* Shop owners are redirected away from /home, so send them to the dashboard */}
-          <Link href={isShopOwner ? "/dashboard" : "/home"}>
+          <Link href={isShopOwner ? "/dashboard" : "/"}>
             <Button variant="ghost">{isShopOwner ? "Back to Dashboard" : "Back to Home"}</Button>
           </Link>
         </div>

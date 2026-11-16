@@ -249,12 +249,18 @@ router.post('/login', async (req, res) => {
     }
 
     // -- Portal role validation --------------------------------------------
-    // If the frontend sends a specific role (from a dedicated portal), verify it matches
-    if (requestedRole && user.role !== requestedRole) {
-      const portalNames = { student: 'Student', shop_owner: 'Shop Owner', admin: 'Admin' };
+    // Admin accounts must log in via the separate admin portal
+    if (user.role === 'admin' && requestedRole !== 'admin') {
       return res.status(403).json({
         success: false,
-        message: `This account is registered as "${portalNames[user.role] || user.role}". Please use the correct login portal.`
+        message: 'Admin accounts must sign in via the dedicated Admin Portal (/admin-portal/login).'
+      });
+    }
+
+    if (requestedRole === 'admin' && user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access restricted. This portal is for system administrators only.'
       });
     }
 
@@ -346,11 +352,17 @@ router.post('/firebase-sync', async (req, res) => {
           user.suspensionReason = '';
         }
       }
-      if (role && user.role !== role) {
-        const portalNames = { student: 'Student', shop_owner: 'Shop Owner', admin: 'Admin' };
+      // Admin accounts must log in via the separate admin portal
+      if (user.role === 'admin' && role !== 'admin') {
         return res.status(403).json({
           success: false,
-          message: `This account is registered as "${portalNames[user.role] || user.role}". Please use the correct login portal.`
+          message: 'Admin accounts must sign in via the dedicated Admin Portal (/admin-portal/login).'
+        });
+      }
+      if (role === 'admin' && user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access restricted. This portal is for system administrators only.'
         });
       }
       if ((user.role === 'student' || user.role === 'admin') && !user.isVerified) {

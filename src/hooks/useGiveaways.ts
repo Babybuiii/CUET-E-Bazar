@@ -213,3 +213,85 @@ export async function cancelGiveaway(id: string): Promise<{ success: boolean; me
   }
 }
 
+// ── Unclaim a giveaway (claimant releases claim, or donor/admin returns to available) ──
+export async function unclaimGiveaway(id: string): Promise<{ success: boolean; message: string; giveaway?: Giveaway }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "Authentication required." };
+
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}/unclaim`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, message: data?.message || "Failed to unclaim giveaway." };
+    }
+
+    return {
+      success: true,
+      message: data?.message || "Unclaimed successfully.",
+      giveaway: data?.giveaway
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
+}
+
+// ── Donor marks giveaway as given away ──
+export async function markGivenAway(id: string): Promise<{ success: boolean; message: string; giveaway?: Giveaway }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "Authentication required." };
+
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}/mark-given-away`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, message: data?.message || "Failed to update giveaway status." };
+    }
+
+    return {
+      success: true,
+      message: data?.message || "Marked as given away successfully.",
+      giveaway: data?.giveaway
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
+}
+
+// ── Fetch giveaways posted by current user (donor) ──
+export async function fetchMyGiveaways(): Promise<{ success: boolean; giveaways: Giveaway[]; message?: string }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, giveaways: [], message: "Authentication required." };
+
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/my-giveaways`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      return { success: false, giveaways: [], message: data?.message || "Failed to load your giveaways." };
+    }
+
+    return {
+      success: true,
+      giveaways: data.giveaways || []
+    };
+  } catch (err: any) {
+    return { success: false, giveaways: [], message: err?.message || "Network error." };
+  }
+}
+

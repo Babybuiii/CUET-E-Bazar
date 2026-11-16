@@ -110,7 +110,7 @@ export default function WishlistPage() {
                 <ShoppingBag size={16} className="mr-1.5" /> Browse Marketplace
               </Button>
             </Link>
-            <Link href="/home">
+            <Link href="/">
               <Button variant="ghost" className="border border-slate-300 dark:border-slate-700">Back to Home</Button>
             </Link>
           </div>

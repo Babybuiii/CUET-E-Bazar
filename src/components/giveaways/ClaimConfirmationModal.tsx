@@ -132,7 +132,7 @@ export function ClaimConfirmationModal({
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           initial="hidden" animate="visible" exit="hidden" variants={backdrop}
         >
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
+          <div className="absolute inset-0 bg-black/60" onClick={handleClose} />
 
           <motion.div
             className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden"

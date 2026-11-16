@@ -84,7 +84,7 @@ export function UnpublishConfirmationModal({
         >
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60"
             onClick={handleClose}
           />
 

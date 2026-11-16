@@ -158,8 +158,8 @@ function MarketplaceContent() {
         </Card>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((product) => (
-            <ProductCard key={product._id || product.id} product={product} />
+          {products.map((product, idx) => (
+            <ProductCard key={product._id || product.id} product={product} priority={idx < 4} />
           ))}
         </div>
       )}

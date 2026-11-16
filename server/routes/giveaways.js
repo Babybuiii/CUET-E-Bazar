@@ -24,7 +24,9 @@ const {
   initiateContact,
   cancelGiveaway,
   getMyGiveaways,
-  getMyClaims
+  getMyClaims,
+  unclaimGiveaway,
+  markGivenAway
 } = require('../controllers/giveawayController');
 
 // ── Public routes ─────────────────────────────────────────────────────────────
@@ -113,6 +115,32 @@ router.post(
   '/:id/contact',
   authenticate,
   initiateContact
+);
+
+/**
+ * POST /api/giveaways/:id/unclaim
+ * Claimant unclaims, or donor/admin marks as unclaimed.
+ */
+router.post(
+  '/:id/unclaim',
+  authenticate,
+  unclaimGiveaway
+);
+
+router.post(
+  '/:id/mark-unclaimed',
+  authenticate,
+  unclaimGiveaway
+);
+
+/**
+ * POST /api/giveaways/:id/mark-given-away
+ * Donor or admin marks item as given away.
+ */
+router.post(
+  '/:id/mark-given-away',
+  authenticate,
+  markGivenAway
 );
 
 /**

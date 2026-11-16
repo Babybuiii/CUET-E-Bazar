@@ -1,6 +1,6 @@
 // Shared TypeScript types for the Giveaways feature (FCFS)
 
-export type GiveawayStatus = 'available' | 'claimed' | 'expired' | 'cancelled';
+export type GiveawayStatus = 'available' | 'claimed' | 'given_away' | 'expired' | 'cancelled';
 
 export type GiveawayCategory = 'Books' | 'Electronics' | 'Study Materials' | 'Accessories' | 'Others';
 

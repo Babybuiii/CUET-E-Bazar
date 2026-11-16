@@ -12,17 +12,32 @@ import {
   ShoppingBag,
   ExternalLink,
   ShieldCheck,
+  ShieldAlert,
   Search,
   Loader2,
   LogIn,
   RefreshCw,
   AlertCircle,
   UserCheck,
-  Gift
+  Gift,
+  MapPin,
+  Coffee,
+  Tag
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
+import {
+  analyzeConversationHistory,
+  checkDraftInput,
+  requestAiScamAnalysis,
+  ScamDetectionResult
+} from "@/lib/scam-guardian";
+import {
+  ScamGuardianBanner,
+  ScamGuardianStatusBadge,
+  ScamGuardianTypingAlert
+} from "@/components/chat/scam-guardian";
 
 type Participant = {
   _id: string;
@@ -96,6 +111,11 @@ function MessagesContent() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
   const [selfChatNotice, setSelfChatNotice] = useState<string | null>(null);
+
+  // ── Scam Guardian Real-Time Transaction Shield ──
+  const [dismissedGuardianChats, setDismissedGuardianChats] = useState<string[]>([]);
+  const [aiDetection, setAiDetection] = useState<ScamDetectionResult | null>(null);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -491,6 +511,95 @@ function MessagesContent() {
       c.product?.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Instant zero-latency regex evaluation
+  const instantSafety = useMemo(() => {
+    return analyzeConversationHistory(messages);
+  }, [messages]);
+
+  // Deep dialogue context AI analysis (Gemini 2.0 Flash)
+  useEffect(() => {
+    if (!messages || messages.length === 0) {
+      setAiDetection(null);
+      return;
+    }
+
+    let isMounted = true;
+    const runAiAnalysis = async () => {
+      try {
+        setIsAiAnalyzing(true);
+        const payloadMessages = messages.map((m) => ({
+          id: m.id,
+          senderName: m.senderName,
+          text: m.text,
+          isOwn: m.isOwn,
+          timestamp: m.timestamp
+        }));
+
+        const result = await requestAiScamAnalysis({
+          messages: payloadMessages,
+          productContext: activeConv?.product
+            ? {
+                title: activeConv.product.title,
+                price: activeConv.product.price,
+                location: activeConv.product.location
+              }
+            : undefined,
+          participant: activeConv?.participant
+            ? {
+                fullName: activeConv.participant.fullName,
+                department: activeConv.participant.department,
+                hall: activeConv.participant.hall
+              }
+            : undefined
+        });
+
+        if (isMounted) {
+          setAiDetection(result);
+        }
+      } catch (err) {
+        console.warn("AI Scam Guardian background analysis notice:", err);
+      } finally {
+        if (isMounted) {
+          setIsAiAnalyzing(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(runAiAnalysis, 350);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [messages, activeConv]);
+
+  // Merged effective safety state: instant trigger has priority, enriched by deep AI reasoning
+  const conversationSafety = useMemo<ScamDetectionResult>(() => {
+    if (aiDetection && aiDetection.hasRisk) {
+      return {
+        ...aiDetection,
+        matchedKeywords: Array.from(
+          new Set([...instantSafety.matchedKeywords, ...(aiDetection.matchedKeywords || [])])
+        ),
+        flaggedMessageIds: Array.from(
+          new Set([...instantSafety.flaggedMessageIds, ...(aiDetection.flaggedMessageIds || [])])
+        )
+      };
+    }
+    if (instantSafety.hasRisk) {
+      return {
+        ...instantSafety,
+        aiReasoning: aiDetection?.aiReasoning || instantSafety.alertMessage,
+        isAiPowered: aiDetection?.isAiPowered,
+        engine: aiDetection?.engine || "AI Pattern Engine"
+      };
+    }
+    return instantSafety;
+  }, [instantSafety, aiDetection]);
+
+  const draftSafety = useMemo(() => {
+    return checkDraftInput(inputText);
+  }, [inputText]);
+
   // ── Not logged in screen ──
   if (!isLoggedIn) {
     return (
@@ -587,7 +696,7 @@ function MessagesContent() {
                     }}
                     className={`w-full text-left p-3 sm:p-3.5 transition flex items-start gap-2.5 sm:gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/60 ${
                       isActive
-                        ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-l-4 border-brand-emerald"
+                        ? "bg-emerald-50/80 dark:bg-emerald-950/30 ring-1 ring-emerald-500/20"
                         : ""
                     }`}
                   >
@@ -684,29 +793,38 @@ function MessagesContent() {
                   </div>
                 </div>
 
-                {/* Direct Product Link */}
-                {activeConv.product?._id && (
-                  <Link
-                    href={`/marketplace/${activeConv.product._id}`}
-                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-brand-emerald hover:underline shrink-0 bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-500/20"
-                  >
-                    <span className="hidden sm:inline">View Listing</span>
-                    <span className="sm:hidden">Item</span>
-                    <ExternalLink size={11} />
-                  </Link>
-                )}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  {/* CUET Scam Guardian Shield Status */}
+                  <ScamGuardianStatusBadge
+                    detection={conversationSafety}
+                    onClick={() => {}}
+                    isAnalyzing={isAiAnalyzing}
+                  />
 
-                {/* Direct Giveaway Link */}
-                {activeConv.giveaway?._id && (
-                  <Link
-                    href="/giveaways"
-                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-[#0f766e] hover:underline shrink-0 bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-500/20"
-                  >
-                    <span className="hidden sm:inline">View Giveaway</span>
-                    <span className="sm:hidden">Item</span>
-                    <ExternalLink size={11} />
-                  </Link>
-                )}
+                  {/* Direct Product Link */}
+                  {activeConv.product?._id && (
+                    <Link
+                      href={`/marketplace/${activeConv.product._id}`}
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-brand-emerald hover:underline shrink-0 bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-500/20"
+                    >
+                      <span className="hidden sm:inline">View Listing</span>
+                      <span className="sm:hidden">Item</span>
+                      <ExternalLink size={11} />
+                    </Link>
+                  )}
+
+                  {/* Direct Giveaway Link */}
+                  {activeConv.giveaway?._id && (
+                    <Link
+                      href="/giveaways"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-[#0f766e] hover:underline shrink-0 bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-500/20"
+                    >
+                      <span className="hidden sm:inline">View Giveaway</span>
+                      <span className="sm:hidden">Item</span>
+                      <ExternalLink size={11} />
+                    </Link>
+                  )}
+                </div>
               </div>
 
               {/* Self listing alert banner if user opened chat on own ad */}
@@ -715,6 +833,16 @@ function MessagesContent() {
                   <AlertCircle size={14} className="shrink-0 text-amber-600" />
                   <span className="truncate">{selfChatNotice}</span>
                 </div>
+              )}
+
+              {/* CUET Scam Guardian Real-Time Shield Warning Banner */}
+              {conversationSafety.hasRisk && !dismissedGuardianChats.includes(activeChatId) && (
+                <ScamGuardianBanner
+                  detection={conversationSafety}
+                  onDismiss={() => setDismissedGuardianChats((prev) => [...prev, activeChatId])}
+                  onInsertSafeReply={(safeReply) => setInputText(safeReply)}
+                  targetUser={activeConv.participant}
+                />
               )}
 
               {/* Attached Giveaway Context Banner */}
@@ -726,7 +854,7 @@ function MessagesContent() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                        🎁 Giveaway: {activeConv.giveaway.title}
+                        Giveaway: {activeConv.giveaway.title}
                       </p>
                       <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
                         Pickup: {activeConv.giveaway.location}{activeConv.giveaway.pickupSpot ? ` — ${activeConv.giveaway.pickupSpot}` : ""}
@@ -796,58 +924,86 @@ function MessagesContent() {
                     </p>
                   </div>
                 ) : (
-                  messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${msg.isOwn ? "items-end" : "items-start"}`}
-                    >
+                  messages.map((msg) => {
+                    const isFlagged = conversationSafety.flaggedMessageIds.includes(msg.id);
+                    return (
                       <div
-                        className={`max-w-[85%] sm:max-w-md rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm leading-relaxed shadow-sm break-words overflow-hidden ${
-                          msg.isOwn
-                            ? "bg-brand-emerald text-white rounded-tr-none"
-                            : "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-none"
-                        }`}
+                        key={msg.id}
+                        className={`flex flex-col ${msg.isOwn ? "items-end" : "items-start"}`}
                       >
-                        {msg.text}
+                        <div
+                          className={`max-w-[85%] sm:max-w-md rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm leading-relaxed shadow-sm break-words overflow-hidden ${
+                            msg.isOwn
+                              ? "bg-brand-emerald text-white rounded-tr-none"
+                              : isFlagged
+                              ? "bg-rose-50 dark:bg-rose-950/40 text-slate-900 dark:text-slate-100 border border-rose-300 dark:border-rose-800 rounded-tl-none ring-2 ring-rose-500/20"
+                              : "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700/80 rounded-tl-none"
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 px-1">
+                          <span className="text-[9px] sm:text-[10px] text-slate-400">{msg.timestamp}</span>
+                          {isFlagged && !msg.isOwn && (
+                            <span className="text-[9px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-0.5">
+                              <ShieldAlert size={10} /> Suspicious cue
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 px-1">{msg.timestamp}</span>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Quick Negotiation Prompt Chips */}
-              <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white/70 dark:bg-slate-950/70 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto text-[10px] sm:text-[11px] shrink-0 no-scrollbar">
+              <div className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto text-[10px] sm:text-[11px] shrink-0 no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage("Can we meet at TSC Cafeteria for face-to-face inspection & cash payment?")}
+                  className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-brand-emerald dark:text-emerald-300 transition text-[11px] font-medium shrink-0 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1"
+                >
+                  <ShieldCheck size={12} />
+                  <span>Safe COD at TSC</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleSendMessage("Assalamu Alaikum! Is this still available?")}
-                  className="whitespace-nowrap px-2 sm:px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[10px] sm:text-[11px] shrink-0"
+                  className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[11px] shrink-0"
                 >
-                  👋 Available?
+                  Available?
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSendMessage("Can we meet at the Central Library for inspection?")}
-                  className="whitespace-nowrap px-2 sm:px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[10px] sm:text-[11px] shrink-0"
+                  className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[11px] shrink-0 flex items-center gap-1"
                 >
-                  📍 Meet at Library?
+                  <MapPin size={11} />
+                  <span>Meet at Library?</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSendMessage("Can we meet near Central Cafeteria?")}
-                  className="whitespace-nowrap px-2 sm:px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[10px] sm:text-[11px] shrink-0"
+                  className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[11px] shrink-0 flex items-center gap-1"
                 >
-                  ☕ Meet at Cafeteria?
+                  <Coffee size={11} />
+                  <span>Meet at Cafeteria?</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSendMessage("Is the price slightly negotiable?")}
-                  className="whitespace-nowrap px-2 sm:px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[10px] sm:text-[11px] shrink-0"
+                  className="whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition text-[11px] shrink-0 flex items-center gap-1"
                 >
-                  💰 Negotiable?
+                  <Tag size={11} />
+                  <span>Negotiable?</span>
                 </button>
               </div>
+
+              {/* Scam Guardian Real-Time Typing Input Warning */}
+              {draftSafety.isTriggered && draftSafety.warningText && (
+                <ScamGuardianTypingAlert warningText={draftSafety.warningText} />
+              )}
 
               {/* Message Input Box */}
               <form

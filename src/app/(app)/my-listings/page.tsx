@@ -278,24 +278,24 @@ export default function MyListingsPage() {
 
       {/* ── Summary Stats Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <Card className="p-4 bg-slate-50/70 dark:bg-slate-900/50">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total Listed</span>
-          <p className="font-display text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{totalCount}</p>
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-500">Total Listed</span>
+          <p className="font-display text-2xl font-bold text-slate-900 dark:text-white mt-1">{totalCount}</p>
         </Card>
 
-        <Card className="p-4 bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-500/20">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Active for Sale</span>
-          <p className="font-display text-2xl font-extrabold text-brand-emerald mt-1">{activeCount}</p>
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-500">Active for Sale</span>
+          <p className="font-display text-2xl font-bold text-slate-900 dark:text-white mt-1">{activeCount}</p>
         </Card>
 
-        <Card className="p-4 bg-rose-50/50 dark:bg-rose-950/30 border-rose-500/20">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">Sold Items</span>
-          <p className="font-display text-2xl font-extrabold text-rose-600 mt-1">{soldCount}</p>
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-500">Sold Items</span>
+          <p className="font-display text-2xl font-bold text-slate-900 dark:text-white mt-1">{soldCount}</p>
         </Card>
 
-        <Card className="p-4 bg-amber-50/50 dark:bg-amber-950/30 border-amber-500/20">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Active Inventory Value</span>
-          <p className="font-display text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-500">Inventory Value</span>
+          <p className="font-display text-2xl font-bold text-slate-900 dark:text-white mt-1">
             ৳{totalValue.toLocaleString()}
           </p>
         </Card>

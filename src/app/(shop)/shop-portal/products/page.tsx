@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -47,7 +47,7 @@ const EMPTY_FORM: ProductFormData = {
   price: "", stock: "0", status: "active"
 };
 
-export default function MyProductsPage() {
+function MyProductsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const editId = searchParams.get("edit");
@@ -538,6 +538,21 @@ export default function MyProductsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MyProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <Loader2 size={32} className="animate-spin text-brand-emerald" />
+          <p className="mt-3 text-sm font-medium">Loading products...</p>
+        </div>
+      }
+    >
+      <MyProductsContent />
+    </Suspense>
   );
 }
 

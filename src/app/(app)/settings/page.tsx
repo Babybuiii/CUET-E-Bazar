@@ -23,7 +23,8 @@ import {
   LogOut,
   BadgeCheck,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Star
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
@@ -782,8 +783,15 @@ export default function SettingsPage() {
                   <p className="text-slate-500 text-[10px] uppercase">Sold</p>
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-slate-900 dark:text-white">
-                    {user?.rating && Number(user.rating) > 0 ? `${Number(user.rating).toFixed(1)} ★` : "N/A"}
+                  <p className="font-bold text-sm text-slate-900 dark:text-white flex items-center justify-center gap-0.5">
+                    {user?.rating && Number(user.rating) > 0 ? (
+                      <>
+                        <span>{Number(user.rating).toFixed(1)}</span>
+                        <Star size={12} className="fill-amber-400 text-amber-400" />
+                      </>
+                    ) : (
+                      "N/A"
+                    )}
                   </p>
                   <p className="text-slate-500 text-[10px] uppercase">Rating</p>
                 </div>

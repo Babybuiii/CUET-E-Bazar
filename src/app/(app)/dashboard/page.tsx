@@ -12,25 +12,33 @@ import {
   PlusCircle,
   ShoppingBag,
   ExternalLink,
-  Sparkles,
   ArrowRight,
   LogIn,
   RefreshCw,
   Heart,
-  Users,
   Gift,
   MapPin,
   Clock,
   User,
   Edit3,
   Trash2,
-  Loader2
+  Loader2,
+  MessageSquare
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SellModal } from "@/components/marketplace/sell-modal";
 import { EditProductModal } from "@/components/marketplace/edit-product-modal";
+import { OfferGiveawayModal } from "@/components/giveaways/OfferGiveawayModal";
+import {
+  fetchMyGiveaways,
+  fetchMyClaims,
+  unclaimGiveaway,
+  markGivenAway,
+  cancelGiveaway,
+  initiateContact
+} from "@/hooks/useGiveaways";
 import { API_BASE_URL } from "@/lib/api";
 import type { Giveaway } from "@/types/giveaway";
 
@@ -93,6 +101,11 @@ export default function SellerDashboardPage() {
   });
   const [products, setProducts] = useState<ProductAnalytics[]>([]);
   const [claimedGiveaways, setClaimedGiveaways] = useState<Giveaway[]>([]);
+  const [donatedGiveaways, setDonatedGiveaways] = useState<Giveaway[]>([]);
+  const [giveawayTab, setGiveawayTab] = useState<"donating" | "claimed">("donating");
+  const [isOfferOpen, setIsOfferOpen] = useState(false);
+  const [giveawayActionId, setGiveawayActionId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSellOpen, setIsSellOpen] = useState(false);
@@ -121,26 +134,25 @@ export default function SellerDashboardPage() {
         }
       }
 
-      // Fetch claimed giveaways in parallel
+      // Fetch giveaways (both claimed & donated) in parallel
       try {
-        const claimsRes = await fetch(`${API_BASE_URL}/api/giveaways/my-claims`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (claimsRes.ok) {
-          const claimsData = await claimsRes.json();
-          if (claimsData.success && Array.isArray(claimsData.giveaways)) {
-            setClaimedGiveaways(claimsData.giveaways);
-          }
+        const [claimsData, donatedData] = await Promise.all([
+          fetchMyClaims(),
+          fetchMyGiveaways()
+        ]);
+        if (claimsData.success && Array.isArray(claimsData.giveaways)) {
+          setClaimedGiveaways(claimsData.giveaways);
         }
-      } catch (claimErr) {
-        console.warn("Failed to load user's claimed giveaways:", claimErr);
+        if (donatedData.success && Array.isArray(donatedData.giveaways)) {
+          setDonatedGiveaways(donatedData.giveaways);
+        }
+      } catch (giveErr) {
+        console.warn("Failed to load user giveaways:", giveErr);
       }
 
       // Fetch comprehensive seller analytics
       const res = await fetch(`${API_BASE_URL}/api/products/user/dashboard-analytics`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.ok) {
@@ -154,9 +166,7 @@ export default function SellerDashboardPage() {
 
       // Fallback: fetch listings and compute basic metrics
       const fallbackRes = await fetch(`${API_BASE_URL}/api/products/user/my-listings`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
       if (fallbackRes.ok) {
         const fallbackData = await fallbackRes.json();
@@ -199,11 +209,10 @@ export default function SellerDashboardPage() {
   }, [fetchDashboardData]);
 
   const handleDeleteProduct = async (productId: string, title: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${title}"?`)) return;
+
     const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
     if (!token) return;
-    if (!window.confirm(`Delete "${title}"? This removes the listing and its photos permanently.`)) {
-      return;
-    }
 
     try {
       setDeletingId(productId);
@@ -215,7 +224,7 @@ export default function SellerDashboardPage() {
       if (data.success) {
         fetchDashboardData();
       } else {
-        console.error("Delete failed:", data.message);
+        alert(data.message || "Failed to delete product.");
       }
     } catch (err) {
       console.error("Failed to delete product:", err);
@@ -251,7 +260,6 @@ export default function SellerDashboardPage() {
             } catch {}
           }
         }
-        // Refresh to recalculate accurate revenue and metrics
         fetchDashboardData();
       }
     } catch (err) {
@@ -261,20 +269,86 @@ export default function SellerDashboardPage() {
     }
   };
 
+  // ── Giveaway actions ────────────────────────────────────────────────────────
+  const handleUnclaimItem = async (giveawayId: string) => {
+    try {
+      setGiveawayActionId(giveawayId);
+      const res = await unclaimGiveaway(giveawayId);
+      if (res.success) {
+        fetchDashboardData();
+      } else {
+        alert(res.message || "Failed to unclaim item.");
+      }
+    } catch {
+      alert("Failed to unclaim item.");
+    } finally {
+      setGiveawayActionId(null);
+    }
+  };
+
+  const handleMarkGivenAway = async (giveawayId: string) => {
+    try {
+      setGiveawayActionId(giveawayId);
+      const res = await markGivenAway(giveawayId);
+      if (res.success) {
+        fetchDashboardData();
+      } else {
+        alert(res.message || "Failed to mark item.");
+      }
+    } catch {
+      alert("Failed to mark item as given away.");
+    } finally {
+      setGiveawayActionId(null);
+    }
+  };
+
+  const handleCancelDonation = async (giveawayId: string) => {
+    if (!confirm("Are you sure you want to unpublish this giveaway?")) return;
+    try {
+      setGiveawayActionId(giveawayId);
+      const res = await cancelGiveaway(giveawayId);
+      if (res.success) {
+        fetchDashboardData();
+      } else {
+        alert(res.message || "Failed to unpublish.");
+      }
+    } catch {
+      alert("Failed to unpublish giveaway.");
+    } finally {
+      setGiveawayActionId(null);
+    }
+  };
+
+  const handleMessageGiveawayContact = async (giveawayId: string) => {
+    try {
+      setGiveawayActionId(giveawayId);
+      const res = await initiateContact(giveawayId);
+      if (res.success && res.conversationId) {
+        router.push(`/messages?conversationId=${res.conversationId}`);
+      } else {
+        alert(res.message || "Failed to start conversation.");
+      }
+    } catch {
+      alert("Failed to start conversation.");
+    } finally {
+      setGiveawayActionId(null);
+    }
+  };
+
   if (!loading && !isLoggedIn) {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Seller Dashboard"
-          description="Analytics, inventory, listings, and performance insights."
+          title="User Dashboard"
+          description="View your marketplace inventory, analytics, and giveaway activity."
         />
-        <Card className="flex flex-col items-center justify-center p-12 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            <LogIn size={32} />
+        <Card className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <LogIn size={28} />
           </div>
-          <h2 className="mt-4 font-display text-xl font-bold">Sign In Required</h2>
-          <p className="mt-2 max-w-md text-sm text-slate-600 dark:text-slate-300">
-            Please log in with your CUET account to access your personalized seller analytics, wishlists count, and ad performance.
+          <h2 className="mt-4 font-display text-xl font-bold text-slate-900 dark:text-white">Sign In Required</h2>
+          <p className="mt-2 max-w-md text-sm text-slate-600 dark:text-slate-400">
+            Please log in with your CUET account to manage your listings, giveaways, and performance metrics.
           </p>
           <div className="mt-6 flex gap-3">
             <Link href="/login">
@@ -294,17 +368,17 @@ export default function SellerDashboardPage() {
       {/* ── Top Header & Actions ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
-          title="Seller Analytics Dashboard"
+          title="Dashboard"
           description={
             user?.fullName
-              ? `Welcome back, ${user.fullName}. Live buyer traffic, wishlist demand, and sales intelligence.`
-              : "Live analytics on ad clicks, wishlist counts, active inventory, and sales."
+              ? `Welcome back, ${user.fullName}. Monitor your marketplace activity and manage community giveaways.`
+              : "Overview of your listings, sales, and giveaway activity."
           }
         />
         <div className="flex items-center gap-2">
           <button
             onClick={fetchDashboardData}
-            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
             title="Refresh statistics"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -321,289 +395,335 @@ export default function SellerDashboardPage() {
         </div>
       </div>
 
-      {/* ── Core KPI Analytics Grid (6 Cards, 2 side-by-side on mobile) ── */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {/* 1. Wishlisted By */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-rose-200/60 dark:border-rose-900/40 bg-gradient-to-br from-rose-50/50 to-transparent dark:from-rose-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 truncate">
-              Wishlist Saves
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400">
-              <Heart size={14} className="fill-rose-500" />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              {analytics.totalWishlists}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {analytics.clickToSaveRate}% save rate
-            </p>
-          </div>
+      {/* ── Summary KPI Cards (Clean, Solid, Brand Themed - No Rainbow Colors) ── */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <Card className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Active Listings</p>
+          <p className="mt-1 font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+            {analytics.activeListings}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Live on marketplace</p>
         </Card>
 
-        {/* 2. Ad Clicks / Views */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 truncate">
-              Ad Clicks & Visitors
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-              <Eye size={14} />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <div className="flex items-baseline gap-1.5">
-              <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-                {analytics.totalAdClicks}
-              </p>
-              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                clicks
-              </span>
-            </div>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1">
-              <Users size={11} className="text-blue-500" />
-              <span>
-                <strong>{analytics.totalUniqueVisitors ?? (analytics.totalAdClicks > 0 ? 1 : 0)}</strong> unique {analytics.totalUniqueVisitors === 1 ? "user" : "users"}
-              </span>
-            </p>
-          </div>
+        <Card className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Items Sold</p>
+          <p className="mt-1 font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+            {analytics.soldItems}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">{analytics.conversionRate}% conversion rate</p>
         </Card>
 
-        {/* 3. Currently Active */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-emerald-200/60 dark:border-emerald-900/40 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">
-              Active Listings
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-              <Package size={14} />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              {analytics.activeListings}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Live on market
-            </p>
-          </div>
+        <Card className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Revenue</p>
+          <p className="mt-1 font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+            ৳{analytics.totalRevenue.toLocaleString()}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">From completed sales</p>
         </Card>
 
-        {/* 4. Total Revenue */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-teal-200/60 dark:border-teal-900/40 bg-gradient-to-br from-teal-50/50 to-transparent dark:from-teal-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 truncate">
-              Total Revenue
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300">
-              <TrendingUp size={14} />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              ৳{analytics.totalRevenue.toLocaleString()}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              From {analytics.soldItems} sales
-            </p>
-          </div>
-        </Card>
-
-        {/* 5. Items Sold */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-purple-200/60 dark:border-purple-900/40 bg-gradient-to-br from-purple-50/50 to-transparent dark:from-purple-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 truncate">
-              Items Sold
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
-              <CheckCircle2 size={14} />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              {analytics.soldItems}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {analytics.conversionRate}% conversion
-            </p>
-          </div>
-        </Card>
-
-        {/* 6. Potential Revenue */}
-        <Card className="p-2.5 sm:p-4 flex flex-col justify-between border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 truncate">
-              Active Value
-            </span>
-            <div className="flex h-6 w-6 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
-              <Sparkles size={14} />
-            </div>
-          </div>
-          <div className="mt-2 sm:mt-3">
-            <p className="font-display text-lg sm:text-2xl font-black text-slate-900 dark:text-white">
-              ৳{analytics.potentialRevenue.toLocaleString()}
-            </p>
-            <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Pending inventory
-            </p>
-          </div>
+        <Card className="p-4 sm:p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Listing Impressions</p>
+          <p className="mt-1 font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+            {analytics.totalAdClicks}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">{analytics.totalWishlists} wishlist saves</p>
         </Card>
       </div>
 
-      {/* ── My Claimed Items (Giveaways) ── */}
-      <Card className="p-4 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0f766e]/10 text-[#0f766e]">
-              <Gift size={20} />
-            </div>
-            <div>
-              <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                My Claimed Items
-                <span className="rounded-full bg-[#0f766e]/10 text-[#0f766e] px-2.5 py-0.5 text-xs font-semibold">
-                  {claimedGiveaways.length} {claimedGiveaways.length === 1 ? "item" : "items"}
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                100% free giveaway items you have claimed. Coordinate campus pickup with donors.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/giveaways"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0f766e] hover:underline"
-          >
-            Browse Giveaways <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        {claimedGiveaways.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
-              <Gift size={22} />
-            </div>
-            <h3 className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-200">No Claimed Items Yet</h3>
-            <p className="mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
-              When you claim free textbooks, tools, or notes from peers, they will appear here.
+      {/* ── Giveaway Management (Both Donated & Claimed Items) ── */}
+      <Card className="p-4 sm:p-6 space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              Giveaway Management
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Manage items you are giving away and track items you have claimed.
             </p>
-            <Link href="/giveaways" className="mt-3">
-              <Button variant="secondary" className="text-xs py-1.5 px-3">
-                Explore Available Giveaways
-              </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsOfferOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-emerald px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-emerald/90 transition shadow-sm"
+            >
+              <PlusCircle size={14} />
+              <span>Offer a Giveaway</span>
+            </button>
+            <Link
+              href="/giveaways"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-emerald hover:underline"
+            >
+              Public Page <ArrowRight size={13} />
             </Link>
           </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {claimedGiveaways.map((giveaway) => {
-              const displayImg = giveaway.images?.[0] || null;
-              const claimDate = giveaway.claimedAt || giveaway.updatedAt;
-              const formattedDate = claimDate
-                ? new Date(claimDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric"
-                  })
-                : "Recently";
+        </div>
 
-              return (
-                <div
-                  key={giveaway._id}
-                  className="flex flex-col justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3.5 shadow-sm hover:border-[#0f766e]/40 transition space-y-3"
+        {/* Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+          <button
+            onClick={() => setGiveawayTab("donating")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              giveawayTab === "donating"
+                ? "bg-brand-emerald text-white"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+            }`}
+          >
+            Items I&apos;m Donating ({donatedGiveaways.length})
+          </button>
+          <button
+            onClick={() => setGiveawayTab("claimed")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              giveawayTab === "claimed"
+                ? "bg-brand-emerald text-white"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+            }`}
+          >
+            Items I&apos;ve Claimed ({claimedGiveaways.length})
+          </button>
+        </div>
+
+        {/* Tab 1: Items I'm Donating */}
+        {giveawayTab === "donating" && (
+          <div>
+            {donatedGiveaways.length === 0 ? (
+              <div className="py-8 text-center">
+                <Gift size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-xs text-slate-500">You haven&apos;t posted any giveaways yet.</p>
+                <button
+                  onClick={() => setIsOfferOpen(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50"
                 >
-                  <div className="space-y-2.5">
-                    {/* Image & Status Row */}
-                    <div className="flex items-start gap-3">
-                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        {displayImg ? (
-                          <Image
-                            src={displayImg}
-                            alt={giveaway.title}
-                            fill
-                            className="object-cover"
-                            unoptimized={displayImg.includes("cloudinary.com") || displayImg.startsWith("data:")}
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-slate-300">
-                            <Gift size={22} />
+                  <PlusCircle size={13} /> Offer your first giveaway
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {donatedGiveaways.map((item) => {
+                  const displayImg = item.images?.[0] || null;
+                  const isActionLoading = giveawayActionId === item._id;
+
+                  return (
+                    <div
+                      key={item._id}
+                      className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-sm space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            {displayImg ? (
+                              <Image
+                                src={displayImg}
+                                alt={item.title}
+                                fill
+                                className="object-cover"
+                                unoptimized={displayImg.includes("cloudinary.com") || displayImg.startsWith("data:")}
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-slate-400">
+                                <Gift size={20} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                  item.status === "available"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : item.status === "claimed"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                                    : item.status === "given_away"
+                                    ? "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {item.status.replace("_", " ")}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(item.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <h4 className="mt-1 line-clamp-1 text-xs font-bold text-slate-900 dark:text-white">
+                              {item.title}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {item.category} • {item.location}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Claimant Info if claimed */}
+                        {item.status === "claimed" && item.selectedUser && (
+                          <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-2 text-xs">
+                            <p className="text-[10px] text-slate-400">Claimed by:</p>
+                            <p className="font-semibold text-slate-800 dark:text-slate-200">
+                              {item.selectedUser.fullName}
+                              {item.selectedUser.department && (
+                                <span className="text-[10px] text-slate-400 font-normal ml-1">
+                                  ({item.selectedUser.department})
+                                </span>
+                              )}
+                            </p>
                           </div>
                         )}
                       </div>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="inline-block rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                            Claimed
+                      {/* Donor Management Actions */}
+                      <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                        {item.status === "claimed" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleMarkGivenAway(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg bg-brand-emerald px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-brand-emerald/90 transition"
+                            >
+                              Mark Given Away
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUnclaimItem(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            >
+                              Mark Unclaimed
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMessageGiveawayContact(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            >
+                              Message
+                            </button>
+                          </>
+                        )}
+                        {item.status === "available" && (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelDonation(item._id)}
+                            disabled={isActionLoading}
+                            className="rounded-lg border border-rose-200 dark:border-rose-900/60 px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                          >
+                            Unpublish
+                          </button>
+                        )}
+                        {item.status === "given_away" && (
+                          <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400">
+                            Completed & Handed Over
                           </span>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {formattedDate}
-                          </span>
-                        </div>
-                        <h4 className="mt-1 line-clamp-1 text-sm font-bold text-slate-900 dark:text-white" title={giveaway.title}>
-                          {giveaway.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {giveaway.category} • {giveaway.condition}
-                        </p>
+                        )}
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-                    {/* Donor Details */}
-                    <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                          {giveaway.donor?.avatarUrl ? (
-                            <Image
-                              src={giveaway.donor.avatarUrl}
-                              alt={giveaway.donor.fullName}
-                              width={20}
-                              height={20}
-                              className="rounded-full object-cover"
-                            />
-                          ) : (
-                            <User size={10} />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
-                            Donor: {giveaway.donor?.fullName || "CUET Member"}
-                          </p>
-                          {giveaway.donor?.department && (
-                            <p className="truncate text-[10px] text-slate-400">
-                              {giveaway.donor.department}{giveaway.donor.hall ? ` • ${giveaway.donor.hall}` : ""}
+        {/* Tab 2: Items I've Claimed */}
+        {giveawayTab === "claimed" && (
+          <div>
+            {claimedGiveaways.length === 0 ? (
+              <div className="py-8 text-center">
+                <Gift size={28} className="mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-xs text-slate-500">You haven&apos;t claimed any giveaways yet.</p>
+                <Link
+                  href="/giveaways"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                >
+                  Explore Giveaways
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {claimedGiveaways.map((item) => {
+                  const displayImg = item.images?.[0] || null;
+                  const isActionLoading = giveawayActionId === item._id;
+
+                  return (
+                    <div
+                      key={item._id}
+                      className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 shadow-sm space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            {displayImg ? (
+                              <Image
+                                src={displayImg}
+                                alt={item.title}
+                                fill
+                                className="object-cover"
+                                unoptimized={displayImg.includes("cloudinary.com") || displayImg.startsWith("data:")}
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-slate-400">
+                                <Gift size={20} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                              {item.status.replace("_", " ")}
+                            </span>
+                            <h4 className="mt-1 line-clamp-1 text-xs font-bold text-slate-900 dark:text-white">
+                              {item.title}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              Donor: {item.donor?.fullName || "CUET Member"}
                             </p>
-                          )}
+                          </div>
+                        </div>
+
+                        {/* Location Details */}
+                        <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-2 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                          <p className="truncate">
+                            <strong>Pickup:</strong> {item.location} {item.pickupSpot ? `(${item.pickupSpot})` : ""}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-                        <MapPin size={11} className="shrink-0 text-slate-400" />
-                        <span className="truncate">
-                          {giveaway.location}{giveaway.pickupSpot ? ` — ${giveaway.pickupSpot}` : ""}
-                        </span>
+                      {/* Claimant Actions: Unclaim & Message */}
+                      <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUnclaimItem(item._id)}
+                          disabled={isActionLoading}
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                        >
+                          Unclaim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMessageGiveawayContact(item._id)}
+                          disabled={isActionLoading}
+                          className="rounded-lg bg-brand-emerald px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-brand-emerald/90 transition"
+                        >
+                          Message Donor
+                        </button>
                       </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </Card>
 
       {/* ── Detailed Listing Analytics Table ── */}
-      <Card className="p-6">
+      <Card className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
           <div>
             <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-              Listing Performance & Demand Analytics
+              My Listings & Inventory
             </h2>
             <p className="text-xs text-slate-500">
-              Breakdown of ad clicks, student wishlist saves, and active inventory status
+              Manage your active and sold products, view analytics, and update status.
             </p>
           </div>
-          {/* Shop owners have no Listings page - they manage products here */}
           {user?.role !== "shop_owner" && (
             <Link
               href="/my-listings"
@@ -617,18 +737,18 @@ export default function SellerDashboardPage() {
         {loading ? (
           <div className="flex py-16 items-center justify-center text-sm text-slate-500">
             <RefreshCw size={20} className="animate-spin mr-2 text-brand-emerald" />
-            Analyzing your products...
+            Loading listings...
           </div>
         ) : products.length === 0 ? (
           <div className="py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400">
-              <ShoppingBag size={30} />
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400">
+              <ShoppingBag size={28} />
             </div>
             <h3 className="mt-4 font-semibold text-slate-800 dark:text-slate-200">
               No Listings Found
             </h3>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-              Start posting your gadgets, textbooks, drawing tools, or cycles to track live buyer demand and ad clicks here.
+              Post textbooks, drawing instruments, calculators, cycles or gadgets to sell to campus peers.
             </p>
             <div className="mt-5">
               <Button variant="primary" onClick={() => setIsSellOpen(true)} className="text-xs">
@@ -639,7 +759,7 @@ export default function SellerDashboardPage() {
           </div>
         ) : (
           <>
-            {/* Mobile Card View: All options visible at once, no horizontal scrolling needed */}
+            {/* Mobile Card View */}
             <div className="mt-3 space-y-2.5 md:hidden">
               {products.map((item) => {
                 const firstImg = item.images?.[0];
@@ -651,9 +771,8 @@ export default function SellerDashboardPage() {
                 return (
                   <div
                     key={item._id}
-                    className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 p-3 shadow-sm space-y-2.5"
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-sm space-y-2.5"
                   >
-                    {/* Top Row: Thumbnail + Title + Status */}
                     <div className="flex items-start gap-2.5">
                       <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
                         {imgSrc ? (
@@ -681,7 +800,7 @@ export default function SellerDashboardPage() {
                               item.status === "active"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                                 : item.status === "sold"
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                                 : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                             }`}
                           >
@@ -694,54 +813,30 @@ export default function SellerDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Middle Row: Price & Metrics (Ad Clicks & Saves) */}
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2 text-xs">
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-2 text-xs">
                       <div>
-                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">
                           ৳{item.price.toLocaleString()}
                         </span>
-                        {item.originalPrice && Number(item.originalPrice) > Number(item.price) && (
-                          <span className="ml-1.5 text-[10px] text-slate-400 line-through">
-                            ৳{Number(item.originalPrice).toLocaleString()}
-                          </span>
-                        )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-[10px]"
-                          title={`${item.viewsCount} total clicks by ${item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)} unique users`}
-                        >
-                          <Eye size={11} />
-                          {item.viewsCount}
-                          <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400 border-l border-blue-200 dark:border-blue-800 pl-1 ml-0.5">
-                            {item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)}u
-                          </span>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <span className="inline-flex items-center gap-1">
+                          <Eye size={11} /> {item.viewsCount}
                         </span>
-                        <span
-                          className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-full text-[10px] ${
-                            item.wishlistCount > 0
-                              ? "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300"
-                              : "bg-slate-100 text-slate-400 dark:bg-slate-800"
-                          }`}
-                        >
-                          <Heart
-                            size={11}
-                            className={item.wishlistCount > 0 ? "fill-rose-500 text-rose-500" : ""}
-                          />
-                          {item.wishlistCount}
+                        <span className="inline-flex items-center gap-1">
+                          <Heart size={11} /> {item.wishlistCount}
                         </span>
                       </div>
                     </div>
 
-                    {/* Bottom Row: Actions (No sideways scroll, full visibility) */}
-                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2">
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                       {item.status === "active" ? (
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(item._id, "sold")}
                           disabled={statusUpdatingId === item._id}
-                          className="w-full rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 py-1.5 text-xs font-semibold transition text-center"
+                          className="rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 py-1 text-[11px] font-semibold transition"
                         >
                           Mark Sold
                         </button>
@@ -750,31 +845,17 @@ export default function SellerDashboardPage() {
                           type="button"
                           onClick={() => handleToggleStatus(item._id, "active")}
                           disabled={statusUpdatingId === item._id}
-                          className="w-full rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 py-1.5 text-xs font-semibold transition text-center"
+                          className="rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 py-1 text-[11px] font-semibold transition"
                         >
                           Re-activate
                         </button>
                       )}
-                      <Link
-                        href={`/marketplace/${item._id}`}
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1 text-center"
-                      >
-                        <ExternalLink size={12} /> View Ad
-                      </Link>
                       <button
                         type="button"
                         onClick={() => setEditingProduct(item)}
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center gap-1"
+                        className="rounded-lg border border-slate-200 dark:border-slate-700 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50"
                       >
-                        <Edit3 size={12} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteProduct(item._id, item.title)}
-                        disabled={deletingId === item._id}
-                        className="w-full rounded-lg border border-rose-200 dark:border-rose-900/60 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 inline-flex items-center justify-center gap-1 disabled:opacity-50"
-                      >
-                        {deletingId === item._id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
+                        Edit
                       </button>
                     </div>
                   </div>
@@ -782,20 +863,20 @@ export default function SellerDashboardPage() {
               })}
             </div>
 
-            {/* Desktop Table View (Retained for md and larger screens) */}
+            {/* Desktop Table */}
             <div className="mt-4 hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-2 font-bold">Product</th>
-                    <th className="py-3 px-3 font-bold">Price</th>
-                    <th className="py-3 px-3 font-bold text-center">Ad Clicks & Visitors</th>
-                    <th className="py-3 px-3 font-bold text-center">Wishlists</th>
-                    <th className="py-3 px-3 font-bold">Status</th>
-                    <th className="py-3 px-2 font-bold text-right">Actions</th>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th className="py-2.5 px-2 font-semibold">Product</th>
+                    <th className="py-2.5 px-3 font-semibold">Price</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">Views</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">Saves</th>
+                    <th className="py-2.5 px-3 font-semibold">Status</th>
+                    <th className="py-2.5 px-2 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {products.map((item) => {
                     const firstImg = item.images?.[0];
                     const imgSrc =
@@ -804,17 +885,16 @@ export default function SellerDashboardPage() {
                         : firstImg?.thumbnailUrl || firstImg?.url || "";
 
                     return (
-                      <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                        {/* Product Column */}
+                      <tr key={item._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                         <td className="py-3 px-2">
-                          <div className="flex items-center gap-3 min-w-[220px]">
-                            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
+                          <div className="flex items-center gap-3 min-w-[200px]">
+                            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
                               {imgSrc ? (
                                 imgSrc.startsWith("data:") ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={imgSrc} alt={item.title} className="h-full w-full object-contain p-0.5" />
                                 ) : (
-                                  <Image src={imgSrc} alt={item.title} fill className="object-contain p-0.5" sizes="48px" />
+                                  <Image src={imgSrc} alt={item.title} fill className="object-contain p-0.5" sizes="44px" />
                                 )
                               ) : (
                                 <ShoppingBag size={18} className="text-slate-400" />
@@ -823,7 +903,7 @@ export default function SellerDashboardPage() {
                             <div className="min-w-0">
                               <Link
                                 href={`/marketplace/${item._id}`}
-                                className="font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-emerald hover:underline line-clamp-1"
+                                className="font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-emerald line-clamp-1"
                               >
                                 {item.title}
                               </Link>
@@ -834,57 +914,29 @@ export default function SellerDashboardPage() {
                           </div>
                         </td>
 
-                        {/* Price Column */}
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            ৳{item.price.toLocaleString()}
-                          </span>
-                          {item.originalPrice && Number(item.originalPrice) > Number(item.price) && (
-                            <span className="block text-[10px] text-slate-400 line-through">
-                              ৳{Number(item.originalPrice).toLocaleString()}
-                            </span>
-                          )}
+                        <td className="py-3 px-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          ৳{item.price.toLocaleString()}
                         </td>
 
-                        {/* Ad Clicks & Visitors Column */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <div className="inline-flex flex-col items-center gap-0.5">
-                            <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full text-xs" title="Total clicks">
-                              <Eye size={12} />
-                              {item.viewsCount} {item.viewsCount === 1 ? "click" : "clicks"}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400" title="Unique users">
-                              <Users size={11} className="text-blue-400" />
-                              {item.uniqueViewsCount ?? (item.viewsCount > 0 ? 1 : 0)} unique
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Wishlist Column */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-full text-xs ${
-                              item.wishlistCount > 0
-                                ? "bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 ring-1 ring-rose-500/20"
-                                : "bg-slate-100 text-slate-400 dark:bg-slate-800"
-                            }`}
-                          >
-                            <Heart
-                              size={12}
-                              className={item.wishlistCount > 0 ? "fill-rose-500 text-rose-500" : ""}
-                            />
-                            {item.wishlistCount} {item.wishlistCount === 1 ? "save" : "saves"}
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {item.viewsCount}
                           </span>
                         </td>
 
-                        {/* Status Column */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {item.wishlistCount}
+                          </span>
+                        </td>
+
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                               item.status === "active"
                                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                                 : item.status === "sold"
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                                 : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                             }`}
                           >
@@ -892,7 +944,6 @@ export default function SellerDashboardPage() {
                           </span>
                         </td>
 
-                        {/* Actions Column */}
                         <td className="py-3 px-2 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-1.5">
                             {item.status === "active" ? (
@@ -900,7 +951,7 @@ export default function SellerDashboardPage() {
                                 type="button"
                                 onClick={() => handleToggleStatus(item._id, "sold")}
                                 disabled={statusUpdatingId === item._id}
-                                className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 px-2 py-1 text-[10px] font-semibold transition"
+                                className="rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 px-2 py-1 text-[11px] font-semibold transition"
                               >
                                 Mark Sold
                               </button>
@@ -909,31 +960,25 @@ export default function SellerDashboardPage() {
                                 type="button"
                                 onClick={() => handleToggleStatus(item._id, "active")}
                                 disabled={statusUpdatingId === item._id}
-                                className="rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-1 text-[10px] font-semibold transition"
+                                className="rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-1 text-[11px] font-semibold transition"
                               >
                                 Re-activate
                               </button>
                             )}
-                            <Link
-                              href={`/marketplace/${item._id}`}
-                              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-0.5"
-                            >
-                              <ExternalLink size={10} /> View
-                            </Link>
                             <button
                               type="button"
                               onClick={() => setEditingProduct(item)}
-                              className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-0.5"
+                              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-0.5"
                             >
-                              <Edit3 size={10} /> Edit
+                              <Edit3 size={11} /> Edit
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteProduct(item._id, item.title)}
                               disabled={deletingId === item._id}
-                              className="rounded border border-rose-200 dark:border-rose-900/60 px-2 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 inline-flex items-center gap-0.5 disabled:opacity-50"
+                              className="rounded-lg border border-rose-200 dark:border-rose-900/60 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 inline-flex items-center gap-0.5 disabled:opacity-50"
                             >
-                              {deletingId === item._id ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />} Delete
+                              {deletingId === item._id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />} Delete
                             </button>
                           </div>
                         </td>
@@ -961,6 +1006,12 @@ export default function SellerDashboardPage() {
           setEditingProduct(null);
           fetchDashboardData();
         }}
+      />
+
+      <OfferGiveawayModal
+        isOpen={isOfferOpen}
+        onClose={() => setIsOfferOpen(false)}
+        onSuccess={() => fetchDashboardData()}
       />
     </div>
   );

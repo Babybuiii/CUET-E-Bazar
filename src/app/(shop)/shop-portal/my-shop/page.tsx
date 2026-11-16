@@ -307,8 +307,8 @@ export default function MyShopPage() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">{shop.shopName}</h2>
                   {shop.isVerified && (
-                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                      ✓ Verified
+                    <span className="text-[10px] font-bold bg-emerald-50 text-brand-emerald dark:bg-emerald-950/50 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                      <CheckCircle2 size={11} /> Verified
                     </span>
                   )}
                 </div>
