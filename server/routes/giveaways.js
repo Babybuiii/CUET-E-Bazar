@@ -34,8 +34,27 @@ const {
 /**
  * GET /api/giveaways
  * Query params: category, location, search, hideClaimed, limit
+ * Optionally decode token so the controller can exclude the donor's own listings.
  */
-router.get('/', getGiveaways);
+router.get('/', (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_cuet_ebazar_key_2026';
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      const User    = require('../models/User');
+      User.findById(decoded.id).then(user => {
+        req.user = user || undefined;
+        next();
+      }).catch(() => next());
+    } catch {
+      next();
+    }
+  } else {
+    next();
+  }
+}, getGiveaways);
 
 /**
  * GET /api/giveaways/my-giveaways

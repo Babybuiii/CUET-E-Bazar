@@ -44,7 +44,11 @@ export function useGiveaways(filters: GiveawayFilters = {}): UseGiveawaysReturn 
       if (filters.search?.trim()) params.set("search", filters.search.trim());
       if (filters.hideClaimed) params.set("hideClaimed", "true");
 
-      const res  = await fetch(`${API_BASE_URL}/api/giveaways?${params.toString()}`);
+      // Pass auth token so the server can exclude the user's own listed giveaways
+      const token = getAuthToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const res  = await fetch(`${API_BASE_URL}/api/giveaways?${params.toString()}`, { headers });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || "Failed to load giveaways.");
       setGiveaways(data.giveaways || []);

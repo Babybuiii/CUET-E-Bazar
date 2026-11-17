@@ -67,6 +67,11 @@ const getGiveaways = async (req, res) => {
       ];
     }
 
+    // Exclude the authenticated user's own giveaways so they cannot claim their own listing
+    if (req.user && req.user._id) {
+      filter.donor = { $ne: req.user._id };
+    }
+
     const giveaways = await Giveaway.find(filter)
       .populate('donor',        'fullName userId department hall avatarUrl isVerified')
       .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified')

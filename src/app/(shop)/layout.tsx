@@ -9,6 +9,7 @@ import {
   Package,
   ShoppingBag,
   Bell,
+  MessageCircle,
   User,
   LogOut,
   Menu,
@@ -26,6 +27,7 @@ const OWNER_NAV = [
   { name: "My Shop", href: "/shop-portal/my-shop", icon: Store },
   { name: "My Products", href: "/shop-portal/products", icon: Package },
   { name: "Orders", href: "/shop-portal/orders", icon: ShoppingBag },
+  { name: "Messages", href: "/shop-portal/messages", icon: MessageCircle },
   { name: "Notifications", href: "/shop-portal/notifications", icon: Bell },
 ];
 
@@ -35,6 +37,7 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
   const { user, loading, isLoggedIn } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   // ── Auth Guard ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -96,6 +99,35 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
     const interval = setInterval(fetchUnread, 20000);
     return () => clearInterval(interval);
   }, [router]);
+
+  // ── Fetch unread message count ────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchUnreadMessages = async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/messages/conversations`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.conversations)) {
+          // Count conversations that have messages not sent by us (proxy for unread)
+          const myId = data.currentUserId || "";
+          let count = 0;
+          data.conversations.forEach((c: any) => {
+            const lastSender = c.lastMessage?.sender?.toString() || c.lastMessage?.sender || "";
+            if (lastSender && lastSender !== myId && c.lastMessage?.text) {
+              count++;
+            }
+          });
+          setUnreadMessages(count);
+        }
+      } catch {}
+    };
+    fetchUnreadMessages();
+    const interval = setInterval(fetchUnreadMessages, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     clearAuthSession();
@@ -173,6 +205,7 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             const isBell = item.href.includes("notifications");
+            const isMessages = item.href.includes("messages");
             return (
               <Link
                 key={item.href}
@@ -190,6 +223,11 @@ export default function ShopPortalLayout({ children }: { children: React.ReactNo
                 {isBell && unreadCount > 0 && (
                   <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+                {isMessages && !isActive && unreadMessages > 0 && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                    {unreadMessages > 99 ? "99+" : unreadMessages}
                   </span>
                 )}
                 {isActive && <ChevronRight size={14} className="ml-auto text-white/70" />}
