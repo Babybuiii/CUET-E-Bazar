@@ -849,8 +849,13 @@ export default function AdminProductsPage() {
  <label className="font-semibold text-slate-700 dark:text-slate-300">Price (৳)</label>
  <input
  type="number"
+ step="any"
  value={editForm.price}
  onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })}
+ onWheel={(e) => e.currentTarget.blur()}
+ onKeyDown={(e) => {
+   if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+ }}
  className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-xs outline-none focus:border-brand-emerald"
  />
  </div>
@@ -860,6 +865,10 @@ export default function AdminProductsPage() {
  type="number"
  value={editForm.stock}
  onChange={(e) => setEditForm({ ...editForm, stock: Number(e.target.value) })}
+ onWheel={(e) => e.currentTarget.blur()}
+ onKeyDown={(e) => {
+   if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+ }}
  className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-xs outline-none focus:border-brand-emerald"
  />
  </div>

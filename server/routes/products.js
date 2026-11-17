@@ -489,7 +489,7 @@ router.post('/', authenticate, upload.array('images', 8), async (req, res) => {
     const product = await Product.create({
       title: title.trim(),
       description: description.trim(),
-      price: Number(price),
+      price: Math.round(Number(price) * 100) / 100,
       category,
       condition,
       location,
@@ -557,7 +557,7 @@ router.put('/:id', authenticate, upload.array('newImages', 8), async (req, res) 
 
     if (title !== undefined) product.title = title.trim();
     if (description !== undefined) product.description = description.trim();
-    if (price !== undefined) product.price = Number(price);
+    if (price !== undefined) product.price = Math.round(Number(price) * 100) / 100;
     if (originalPrice !== undefined) product.originalPrice = originalPrice ? Number(originalPrice) : null;
     if (discount !== undefined) product.discount = Number(discount);
     if (category !== undefined) product.category = category;

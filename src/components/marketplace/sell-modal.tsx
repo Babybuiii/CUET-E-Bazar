@@ -386,9 +386,14 @@ export function SellModal({ isOpen, onClose, onSuccess }: SellModalProps) {
  type="number"
  required
  min="0"
+ step="any"
  placeholder="e.g. 1200"
  value={formData.price}
  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+ onWheel={(e) => e.currentTarget.blur()}
+ onKeyDown={(e) => {
+   if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+ }}
  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-brand-emerald focus:bg-white dark:border-slate-700 dark:bg-slate-800 dark:focus:border-brand-emerald"
  />
  </div>

@@ -285,7 +285,7 @@ router.post('/owner/products', authenticate, upload.array('images', 8), async (r
       return res.status(404).json({ success: false, message: 'No shop found for your account.' });
     }
 
-    const { title, description, category, price, stock, status = 'active' } = req.body;
+    const { title, description, category, price, stock, status = 'active', coverIndex } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: 'Product title is required.' });
@@ -319,7 +319,7 @@ router.post('/owner/products', authenticate, upload.array('images', 8), async (r
           url: fullUrl,
           thumbnailUrl: makeThumbnailUrl(fullUrl),
           publicId: f.filename || f.public_id || `shop-product-${Date.now()}-${idx}`,
-          isCover: idx === 0
+          isCover: false
         };
       });
     } else {
@@ -329,17 +329,29 @@ router.post('/owner/products', authenticate, upload.array('images', 8), async (r
           url: base64Data,
           thumbnailUrl: base64Data,
           publicId: `local-shop-${Date.now()}-${idx}`,
-          isCover: idx === 0
+          isCover: false
         };
       });
     }
+
+    // Set designated cover/thumbnail photo
+    const cIdx = Number(coverIndex) || 0;
+    if (cIdx > 0 && cIdx < images.length) {
+      const [chosenCover] = images.splice(cIdx, 1);
+      images.unshift(chosenCover);
+    }
+    images.forEach((img, i) => {
+      img.isCover = i === 0;
+    });
+
+    const cleanPrice = Math.round(Number(price) * 100) / 100;
 
     // Shop products only need 1 image minimum
     const newProduct = await Product.create({
       title: title.trim(),
       description: description ? description.trim() : '',
       category: category.trim(),
-      price: Number(price),
+      price: cleanPrice,
       stock: Math.max(0, Number(stock) || 0),
       status: status || 'active',
       images,
@@ -397,60 +409,109 @@ router.patch('/owner/products/:id', authenticate, upload.array('images', 8), asy
       return res.status(404).json({ success: false, message: 'Product not found or not owned by your shop.' });
     }
 
-    const { title, description, category, price, stock, status } = req.body;
+    const { title, description, category, price, stock, status, existingImages, coverIndex } = req.body;
 
     if (title !== undefined && title.trim()) product.title = title.trim();
     if (description !== undefined) product.description = description.trim();
     if (category !== undefined && category.trim()) product.category = category.trim();
-    if (price !== undefined && !isNaN(Number(price))) product.price = Number(price);
-    if (stock !== undefined && !isNaN(Number(stock))) product.stock = Math.max(0, Number(stock));
+    if (price !== undefined && !isNaN(Number(price))) {
+      product.price = Math.round(Number(price) * 100) / 100;
+    }
+    if (stock !== undefined && !isNaN(Number(stock))) {
+      product.stock = Math.max(0, Number(stock));
+    }
     if (status !== undefined) product.status = status;
 
-    if (files.length > 0) {
-      function makeThumbnailUrl(url) {
-        if (!url || typeof url !== 'string') return '';
-        if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
-          return url.replace('/upload/', '/upload/c_limit,w_800,q_auto:best,f_auto/');
-        }
-        return url;
+    function makeThumbnailUrl(url) {
+      if (!url || typeof url !== 'string') return '';
+      if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+        return url.replace('/upload/', '/upload/c_limit,w_800,q_auto:best,f_auto/');
       }
+      return url;
+    }
 
-      let newImages = [];
+    // ── Photo Updates (Keep existing, delete removed, upload new, reorder thumbnail) ──
+    let parsedExisting = null;
+    if (existingImages !== undefined) {
+      try {
+        parsedExisting = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages;
+      } catch (e) {
+        parsedExisting = [...(product.images || [])];
+      }
+    }
+
+    // If existingImages was provided, destroy any deleted images from Cloudinary
+    if (Array.isArray(parsedExisting) && isCloudinaryConfigured && Array.isArray(product.images)) {
+      const keptPublicIds = new Set(
+        parsedExisting
+          .map((img) => (typeof img === 'object' ? img.publicId : null))
+          .filter(Boolean)
+      );
+      const toDelete = product.images.filter(
+        (img) => img.publicId && !img.publicId.startsWith('local-') && !keptPublicIds.has(img.publicId)
+      );
+      if (toDelete.length > 0) {
+        await Promise.all(
+          toDelete.map((img) => cloudinary.uploader.destroy(img.publicId).catch(() => {}))
+        );
+      }
+    }
+
+    let updatedImages = parsedExisting !== null ? [...parsedExisting] : [...(product.images || [])];
+
+    // Upload new files if provided
+    if (files.length > 0) {
+      let newlyUploaded = [];
       if (isCloudinaryConfigured) {
-        newImages = files.map((f, idx) => {
+        newlyUploaded = files.map((f, idx) => {
           const fullUrl = f.path || f.secure_url || f.url || '';
           return {
             url: fullUrl,
             thumbnailUrl: makeThumbnailUrl(fullUrl),
             publicId: f.filename || f.public_id || `shop-product-${Date.now()}-${idx}`,
-            isCover: idx === 0
+            isCover: false
           };
         });
       } else {
-        newImages = files.map((f, idx) => {
+        newlyUploaded = files.map((f, idx) => {
           const base64Data = f.buffer ? `data:${f.mimetype};base64,${f.buffer.toString('base64')}` : '';
           return {
             url: base64Data,
             thumbnailUrl: base64Data,
             publicId: `local-shop-${Date.now()}-${idx}`,
-            isCover: idx === 0
+            isCover: false
           };
         });
       }
+      updatedImages = [...updatedImages, ...newlyUploaded];
+    }
 
-      // If old images were on Cloudinary, delete them
-      if (isCloudinaryConfigured && Array.isArray(product.images)) {
-        await Promise.all(
-          product.images.map(img => {
-            if (img.publicId && !img.publicId.startsWith('local-')) {
-              return cloudinary.uploader.destroy(img.publicId).catch(() => {});
-            }
-            return Promise.resolve();
-          })
-        );
+    if (existingImages !== undefined || files.length > 0 || coverIndex !== undefined) {
+      if (updatedImages.length < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'A shop product must have at least 1 image. Please keep at least 1 photo.'
+        });
+      }
+      if (updatedImages.length > 8) {
+        return res.status(400).json({
+          success: false,
+          message: 'A shop product can have at most 8 images.'
+        });
       }
 
-      product.images = newImages;
+      // Reorder designated cover/thumbnail photo to index 0
+      const cIdx = Number(coverIndex) || 0;
+      if (cIdx > 0 && cIdx < updatedImages.length) {
+        const [chosenCover] = updatedImages.splice(cIdx, 1);
+        updatedImages.unshift(chosenCover);
+      }
+
+      updatedImages.forEach((img, i) => {
+        img.isCover = i === 0;
+      });
+
+      product.images = updatedImages;
     }
 
     await product.save();
@@ -475,6 +536,96 @@ router.patch('/owner/products/:id', authenticate, upload.array('images', 8), asy
       success: false,
       message: err.message || 'Failed to update product.'
     });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PATCH /api/shops/owner/products/:id/thumbnail — Dedicated route to set cover/thumbnail
+// ═══════════════════════════════════════════════════════════════════════════════
+router.patch('/owner/products/:id/thumbnail', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'shop_owner' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only shop owners can edit products.' });
+    }
+
+    const shop = await Shop.findOne({ owner: req.user._id }).select('_id');
+    if (!shop) {
+      return res.status(404).json({ success: false, message: 'No shop found for your account.' });
+    }
+
+    const product = await Product.findOne({ _id: req.params.id, shop: shop._id });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found or not owned by your shop.' });
+    }
+
+    const { coverIndex, publicId, url } = req.body;
+    let targetIdx = -1;
+
+    if (publicId) {
+      targetIdx = product.images.findIndex((img) => img.publicId === publicId);
+    } else if (url) {
+      targetIdx = product.images.findIndex((img) => img.url === url || img.thumbnailUrl === url);
+    } else if (coverIndex !== undefined && !isNaN(Number(coverIndex))) {
+      targetIdx = Number(coverIndex);
+    }
+
+    if (targetIdx >= 0 && targetIdx < product.images.length) {
+      const [chosenCover] = product.images.splice(targetIdx, 1);
+      product.images.unshift(chosenCover);
+      product.images.forEach((img, i) => {
+        img.isCover = i === 0;
+      });
+      await product.save();
+      return res.json({ success: true, message: 'Product thumbnail updated successfully.', product });
+    }
+
+    return res.status(400).json({ success: false, message: 'Invalid cover index or photo identifier.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Failed to update thumbnail.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DELETE /api/shops/owner/products/:id/images/:imageIndex — Dedicated route to delete photo
+// ═══════════════════════════════════════════════════════════════════════════════
+router.delete('/owner/products/:id/images/:imageIndex', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'shop_owner' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only shop owners can edit products.' });
+    }
+
+    const shop = await Shop.findOne({ owner: req.user._id }).select('_id');
+    if (!shop) {
+      return res.status(404).json({ success: false, message: 'No shop found for your account.' });
+    }
+
+    const product = await Product.findOne({ _id: req.params.id, shop: shop._id });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found or not owned by your shop.' });
+    }
+
+    if ((product.images || []).length <= 1) {
+      return res.status(400).json({ success: false, message: 'A shop product must have at least 1 image.' });
+    }
+
+    const idx = parseInt(req.params.imageIndex, 10);
+    if (isNaN(idx) || idx < 0 || idx >= product.images.length) {
+      return res.status(400).json({ success: false, message: 'Invalid image index.' });
+    }
+
+    const [deletedImg] = product.images.splice(idx, 1);
+    if (isCloudinaryConfigured && deletedImg.publicId && !deletedImg.publicId.startsWith('local-')) {
+      cloudinary.uploader.destroy(deletedImg.publicId).catch(() => {});
+    }
+
+    product.images.forEach((img, i) => {
+      img.isCover = i === 0;
+    });
+
+    await product.save();
+    return res.json({ success: true, message: 'Photo deleted successfully.', product });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message || 'Failed to delete image.' });
   }
 });
 

@@ -95,13 +95,15 @@ export function ProductCard({ product, priority }: { product: Product; priority?
  setIsWishlisted(newState);
  };
 
- // Choose optimal image URL — prioritize full high-res original URL
- const firstImage = product.images?.[0];
+ // Choose designated cover photo (with fallback to first image)
+ const coverImage = (Array.isArray(product.images) && product.images.length > 0)
+   ? product.images.find(img => typeof img === "object" && (img as any)?.isCover) || product.images[0]
+   : null;
  let displayImage =
- typeof firstImage === "object"
- ? (firstImage.thumbnailUrl || firstImage.url)
- : typeof firstImage === "string"
- ? firstImage
+ coverImage && typeof coverImage === "object"
+ ? (coverImage.thumbnailUrl || coverImage.url)
+ : typeof coverImage === "string"
+ ? coverImage
  : product.image ||
  "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1200&q=85";
 

@@ -497,8 +497,13 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
  type="number"
  required
  min="0"
+ step="any"
  value={formData.price}
  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+ onWheel={(e) => e.currentTarget.blur()}
+ onKeyDown={(e) => {
+   if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+ }}
  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-brand-emerald focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
  />
  </div>
@@ -509,9 +514,14 @@ export function EditProductModal({ isOpen, onClose, product, onUpdated }: EditPr
  <input
  type="number"
  min="0"
+ step="any"
  placeholder="e.g. 1500"
  value={formData.originalPrice}
  onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+ onWheel={(e) => e.currentTarget.blur()}
+ onKeyDown={(e) => {
+   if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+ }}
  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3.5 py-2.5 text-xs sm:text-sm focus:ring-2 focus:ring-brand-emerald/40 focus:outline-none"
  />
  </div>

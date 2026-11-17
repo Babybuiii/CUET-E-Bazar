@@ -55,9 +55,9 @@ export type PublicShop = {
 export type PublicCategoryCount = { category: string; count: number };
 
 const imageOf = (images: Array<ProductImage | string> = []) => {
-  const first = images[0];
-  if (!first) return "";
-  return typeof first === "string" ? first : first.thumbnailUrl || first.url || "";
+  if (!Array.isArray(images) || images.length === 0) return "";
+  const cover = images.find(img => typeof img === "object" && (img as any)?.isCover) || images[0];
+  return typeof cover === "string" ? cover : cover.thumbnailUrl || cover.url || "";
 };
 
 const taka = (n: number) => `৳${(n || 0).toLocaleString()}`;

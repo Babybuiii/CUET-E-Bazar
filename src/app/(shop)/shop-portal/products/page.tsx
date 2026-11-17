@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Plus, Edit3, Trash2, Eye, EyeOff, Package, Search,
-  Loader2, AlertCircle, CheckCircle2, X, Upload, ChevronDown, RefreshCw
+  Loader2, AlertCircle, CheckCircle2, X, Upload, ChevronDown, RefreshCw, Star
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,13 @@ const CATEGORIES = [
   "Food & Beverages", "Stationery", "Health & Beauty", "Others"
 ];
 
+type ProductImage = {
+  url: string;
+  thumbnailUrl: string;
+  publicId?: string;
+  isCover?: boolean;
+};
+
 type Product = {
   _id: string;
   title: string;
@@ -25,7 +32,7 @@ type Product = {
   price: number;
   stock: number;
   status: string;
-  images: Array<{ url: string; thumbnailUrl: string }>;
+  images: ProductImage[];
   qtySold: number;
   createdAt: string;
 };
@@ -38,13 +45,21 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 type ProductFormData = {
-  title: string; description: string; category: string;
-  price: string; stock: string; status: string;
+  title: string;
+  description: string;
+  category: string;
+  price: string;
+  stock: string;
+  status: string;
 };
 
 const EMPTY_FORM: ProductFormData = {
-  title: "", description: "", category: "Others",
-  price: "", stock: "0", status: "active"
+  title: "",
+  description: "",
+  category: "Others",
+  price: "",
+  stock: "0",
+  status: "active"
 };
 
 function MyProductsContent() {
@@ -63,8 +78,12 @@ function MyProductsContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  // Granular photo management state (existing saved photos + newly selected files)
+  const [existingImages, setExistingImages] = useState<ProductImage[]>([]);
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
+  const [coverIndex, setCoverIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async () => {
@@ -96,9 +115,23 @@ function MyProductsContent() {
 
   const openEdit = (p: Product) => {
     setSelectedProduct(p);
-    setForm({ title: p.title, description: p.description || "", category: p.category, price: String(p.price), stock: String(p.stock), status: p.status });
-    setImageFiles([]);
-    setImagePreviews(p.images?.map(i => i.thumbnailUrl) || []);
+    setForm({
+      title: p.title,
+      description: p.description || "",
+      category: p.category,
+      price: String(p.price),
+      stock: String(p.stock),
+      status: p.status
+    });
+    const imgs = Array.isArray(p.images) ? [...p.images] : [];
+    setExistingImages(imgs);
+    setNewImageFiles([]);
+    setNewImagePreviews([]);
+
+    // Find designated cover index
+    const initCover = imgs.findIndex((img) => img.isCover);
+    setCoverIndex(initCover >= 0 ? initCover : 0);
+
     setError(null);
     setModal("edit");
   };
@@ -106,8 +139,10 @@ function MyProductsContent() {
   const openAdd = () => {
     setSelectedProduct(null);
     setForm(EMPTY_FORM);
-    setImageFiles([]);
-    setImagePreviews([]);
+    setExistingImages([]);
+    setNewImageFiles([]);
+    setNewImagePreviews([]);
+    setCoverIndex(0);
     setError(null);
     setModal("add");
   };
@@ -137,10 +172,73 @@ function MyProductsContent() {
       setError("Each image must be under 10MB.");
       return;
     }
+
+    const currentTotal = existingImages.length + newImageFiles.length;
+    const remainingSlots = 8 - currentTotal;
+    if (remainingSlots <= 0) {
+      setError("A product can have at most 8 photos.");
+      return;
+    }
+
+    const filesToAdd = rawFiles.slice(0, remainingSlots);
+    if (rawFiles.length > remainingSlots) {
+      setError(`Only ${remainingSlots} photo slot${remainingSlots === 1 ? '' : 's'} remaining.`);
+    } else {
+      setError(null);
+    }
+
+    setNewImageFiles(prev => [...prev, ...filesToAdd]);
+    const previews = filesToAdd.map(f => URL.createObjectURL(f));
+    setNewImagePreviews(prev => [...prev, ...previews]);
+  };
+
+  const handleRemoveExistingPhoto = (idx: number) => {
+    const totalPhotos = existingImages.length + newImageFiles.length;
+    if (totalPhotos <= 1) {
+      setError("A product must have at least 1 photo. Please upload a replacement before deleting this photo.");
+      return;
+    }
     setError(null);
-    const files = rawFiles.slice(0, 8);
-    setImageFiles(files);
-    setImagePreviews(files.map(f => URL.createObjectURL(f)));
+    setExistingImages(prev => prev.filter((_, i) => i !== idx));
+
+    if (coverIndex === idx) {
+      setCoverIndex(0);
+    } else if (coverIndex > idx) {
+      setCoverIndex(prev => prev - 1);
+    }
+  };
+
+  const handleRemoveNewPhoto = (idx: number) => {
+    const totalPhotos = existingImages.length + newImageFiles.length;
+    if (totalPhotos <= 1) {
+      setError("A product must have at least 1 photo. Please upload a replacement before deleting this photo.");
+      return;
+    }
+    setError(null);
+    const globalIdx = existingImages.length + idx;
+    if (newImagePreviews[idx]?.startsWith("blob:")) {
+      URL.revokeObjectURL(newImagePreviews[idx]);
+    }
+    setNewImageFiles(prev => prev.filter((_, i) => i !== idx));
+    setNewImagePreviews(prev => prev.filter((_, i) => i !== idx));
+
+    if (coverIndex === globalIdx) {
+      setCoverIndex(0);
+    } else if (coverIndex > globalIdx) {
+      setCoverIndex(prev => prev - 1);
+    }
+  };
+
+  const closeModal = () => {
+    newImagePreviews.forEach((src) => {
+      if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+    });
+    setExistingImages([]);
+    setNewImageFiles([]);
+    setNewImagePreviews([]);
+    setCoverIndex(0);
+    setModal(null);
+    setError(null);
   };
 
   const handleSubmit = async (isEdit: boolean) => {
@@ -163,8 +261,14 @@ function MyProductsContent() {
       setError("Stock quantity cannot be negative.");
       return;
     }
-    if (!isEdit && imageFiles.length === 0) {
-      setError("Please select at least 1 image for the product.");
+
+    const totalPhotos = existingImages.length + newImageFiles.length;
+    if (totalPhotos < 1) {
+      setError("Please upload at least 1 image for the product.");
+      return;
+    }
+    if (totalPhotos > 8) {
+      setError("A product can have at most 8 images.");
       return;
     }
 
@@ -179,8 +283,27 @@ function MyProductsContent() {
 
     try {
       const formData = new FormData();
-      Object.entries(form).forEach(([k, v]) => formData.append(k, v));
-      imageFiles.forEach(f => formData.append("images", f));
+      formData.append("title", form.title.trim());
+      formData.append("description", form.description.trim());
+      formData.append("category", form.category.trim());
+      formData.append("price", String(form.price));
+      formData.append("stock", String(form.stock || "0"));
+      formData.append("status", form.status);
+
+      if (isEdit) {
+        formData.append("existingImages", JSON.stringify(existingImages));
+        formData.append("coverIndex", String(coverIndex));
+        newImageFiles.forEach(f => formData.append("images", f));
+      } else {
+        // When adding, reorder files so designated thumbnail is at index 0
+        const filesToUpload = [...newImageFiles];
+        if (coverIndex > 0 && coverIndex < filesToUpload.length) {
+          const [coverFile] = filesToUpload.splice(coverIndex, 1);
+          filesToUpload.unshift(coverFile);
+        }
+        formData.append("coverIndex", "0");
+        filesToUpload.forEach(f => formData.append("images", f));
+      }
 
       const url = isEdit
         ? `${API_BASE_URL}/api/shops/owner/products/${selectedProduct!._id}`
@@ -192,7 +315,7 @@ function MyProductsContent() {
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to save product.");
 
       setSuccess(isEdit ? "Product updated successfully!" : "Product added successfully!");
-      setModal(null);
+      closeModal();
       fetchProducts();
       if (editId) router.replace("/shop-portal/products");
     } catch (err: any) {
@@ -259,18 +382,24 @@ function MyProductsContent() {
     }
   };
 
-  const closeModal = () => {
-    imagePreviews.forEach((src) => {
-      if (src.startsWith("blob:")) URL.revokeObjectURL(src);
-    });
-    setImageFiles([]);
-    setImagePreviews([]);
-    setModal(null);
-    setError(null);
-  };
-
   const inputCls = "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm outline-none focus:border-brand-emerald transition";
   const labelCls = "block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5";
+
+  // Build combined list of existing photos + new uploads
+  const allPhotos = [
+    ...existingImages.map((img, idx) => ({
+      url: img.thumbnailUrl || img.url,
+      isNew: false,
+      idx,
+      globalIdx: idx
+    })),
+    ...newImagePreviews.map((src, idx) => ({
+      url: src,
+      isNew: true,
+      idx,
+      globalIdx: existingImages.length + idx
+    }))
+  ];
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -354,7 +483,8 @@ function MyProductsContent() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {products.map((p) => {
-                  const imgSrc = p.images?.[0]?.thumbnailUrl;
+                  const coverImg = p.images?.find((img) => img.isCover) || p.images?.[0];
+                  const imgSrc = coverImg?.thumbnailUrl || coverImg?.url;
                   return (
                     <tr key={p._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                       <td className="px-4 py-3">
@@ -366,11 +496,14 @@ function MyProductsContent() {
                               <Package size={16} className="text-slate-400" />
                             </div>
                           )}
-                          <span className="font-medium text-slate-900 dark:text-white text-xs sm:text-sm line-clamp-2 max-w-[150px]">{p.title}</span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-900 dark:text-white text-xs sm:text-sm line-clamp-2 max-w-[170px]">{p.title}</span>
+                            <span className="text-[10px] text-slate-400">{p.images?.length || 0} photo{(p.images?.length || 0) === 1 ? "" : "s"}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">{p.category}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white text-xs">৳{p.price}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white text-xs">৳{p.price.toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-bold ${p.stock === 0 ? "text-rose-500" : p.stock <= 5 ? "text-amber-500" : "text-slate-700 dark:text-slate-300"}`}>
                           {p.stock === 0 ? "Out" : p.stock}
@@ -412,7 +545,9 @@ function MyProductsContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="font-display font-bold text-slate-900 dark:text-white">{modal === "add" ? "Add New Product" : "Edit Product"}</h3>
+              <h3 className="font-display font-bold text-slate-900 dark:text-white">
+                {modal === "add" ? "Add New Product" : "Edit Product"}
+              </h3>
               <button onClick={closeModal} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">
                 <X size={18} />
               </button>
@@ -420,67 +555,210 @@ function MyProductsContent() {
             <div className="p-5 space-y-4">
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
-                  <AlertCircle size={14} /> {error}
+                  <AlertCircle size={14} className="shrink-0" /> {error}
                 </div>
               )}
 
               <div>
                 <label className={labelCls}>Product Name *</label>
-                <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputCls} placeholder="e.g. Chicken Burger" required />
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  className={inputCls}
+                  placeholder="e.g. Chicken Burger"
+                  required
+                />
               </div>
+
               <div>
                 <label className={labelCls}>Description</label>
-                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className={inputCls} placeholder="Describe your product..." />
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  rows={2}
+                  className={inputCls}
+                  placeholder="Describe your product..."
+                />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Category *</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                    className={inputCls}
+                  >
                     {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelCls}>Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
+                  <select
+                    value={form.status}
+                    onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                    className={inputCls}
+                  >
                     <option value="active">Active (Visible)</option>
                     <option value="sold">Hidden</option>
                   </select>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Price (৳) *</label>
-                  <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min={0} className={inputCls} placeholder="0" required />
+                  <input
+                    type="number"
+                    step="any"
+                    min={0}
+                    value={form.price}
+                    onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                    onWheel={e => e.currentTarget.blur()}
+                    onKeyDown={e => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                    }}
+                    className={inputCls}
+                    placeholder="0"
+                    required
+                  />
                 </div>
                 <div>
                   <label className={labelCls}>Stock Quantity</label>
-                  <input type="number" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} min={0} className={inputCls} placeholder="0" />
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.stock}
+                    onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
+                    onWheel={e => e.currentTarget.blur()}
+                    onKeyDown={e => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                    }}
+                    className={inputCls}
+                    placeholder="0"
+                  />
                 </div>
               </div>
+
+              {/* ── Granular Photo Management & Thumbnail Selector ── */}
               <div>
-                <label className={labelCls}>Product Images</label>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-4 text-center cursor-pointer hover:border-brand-emerald transition"
-                >
-                  <Upload size={20} className="mx-auto text-slate-400 mb-1" />
-                  <p className="text-xs text-slate-500">Click to upload images (max 8)</p>
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImagesChange} />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={labelCls}>
+                    Product Photos & Card Thumbnail *
+                  </label>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    {allPhotos.length}/8 photos ({allPhotos.length >= 1 ? "Ready" : "Min 1 photo"})
+                  </span>
                 </div>
-                {imagePreviews.length > 0 && (
-                  <div className="mt-2 flex gap-2 flex-wrap">
-                    {imagePreviews.map((src, i) => (
-                      <div key={i} className="relative h-16 w-16">
-                        <Image src={src} alt="" fill unoptimized className="object-cover rounded-lg" />
-                      </div>
-                    ))}
+
+                {allPhotos.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
+                    {allPhotos.map((item) => {
+                      const isCover = item.globalIdx === coverIndex;
+                      return (
+                        <div
+                          key={item.globalIdx}
+                          onClick={() => setCoverIndex(item.globalIdx)}
+                          className={`group relative aspect-square overflow-hidden rounded-xl border-2 transition cursor-pointer bg-slate-50 dark:bg-slate-800 ${
+                            isCover
+                              ? "border-brand-emerald ring-2 ring-brand-emerald/40 shadow-sm"
+                              : "border-slate-200 hover:border-brand-emerald/50 dark:border-slate-700"
+                          }`}
+                          title={isCover ? "Current Card Thumbnail" : "Click to select as Card Thumbnail"}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={item.url}
+                            alt={`Photo ${item.globalIdx + 1}`}
+                            className="h-full w-full object-cover select-none"
+                          />
+
+                          {/* Thumbnail Badge */}
+                          {isCover ? (
+                            <span className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-md bg-brand-emerald px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm pointer-events-none">
+                              <Star size={10} className="fill-amber-300 text-amber-300" />
+                              Thumbnail
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-1.5 left-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white pointer-events-none">
+                              #{item.globalIdx + 1}
+                            </span>
+                          )}
+
+                          {/* Make Thumbnail button on hover */}
+                          {!isCover && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCoverIndex(item.globalIdx);
+                              }}
+                              className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100 hover:bg-brand-emerald"
+                            >
+                              <Star size={9} />
+                              Set Thumbnail
+                            </button>
+                          )}
+
+                          {/* Delete Photo button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (item.isNew) {
+                                handleRemoveNewPhoto(item.idx);
+                              } else {
+                                handleRemoveExistingPhoto(item.idx);
+                              }
+                            }}
+                            className="absolute right-1.5 top-1.5 rounded-full bg-rose-600/90 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-700 shadow"
+                            title="Delete photo"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
+
+                {/* Upload Dropzone */}
+                {allPhotos.length < 8 && (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-center cursor-pointer hover:border-brand-emerald transition bg-slate-50/50 dark:bg-slate-800/30"
+                  >
+                    <Upload size={18} className="mx-auto text-brand-emerald mb-1" />
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {allPhotos.length === 0 ? "Upload Product Photos (1 to 8 photos)" : `Add More Photos (${8 - allPhotos.length} slots left)`}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">JPG, PNG, WebP up to 10MB each</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleImagesChange}
+                    />
+                  </div>
+                )}
+
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <Star size={12} className="text-amber-500 fill-amber-500 shrink-0" />
+                  <span>Click any photo or <strong>Set Thumbnail</strong> to choose which image is displayed on the product card.</span>
+                </p>
               </div>
             </div>
+
             <div className="flex gap-3 px-5 pb-5">
               <Button variant="ghost" onClick={closeModal} className="flex-1">Cancel</Button>
-              <Button onClick={() => handleSubmit(modal === "edit")} disabled={saving} className="flex-1 bg-brand-emerald hover:bg-[#0d665f] text-white">
+              <Button
+                onClick={() => handleSubmit(modal === "edit")}
+                disabled={saving}
+                className="flex-1 bg-brand-emerald hover:bg-[#0d665f] text-white"
+              >
                 {saving ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
                 {modal === "add" ? "Add Product" : "Save Changes"}
               </Button>
@@ -505,7 +783,17 @@ function MyProductsContent() {
                 </div>
               )}
               <label className={labelCls}>New Stock Quantity</label>
-              <input type="number" value={stockValue} onChange={e => setStockValue(e.target.value)} min={0} className={inputCls} />
+              <input
+                type="number"
+                value={stockValue}
+                onChange={e => setStockValue(e.target.value)}
+                onWheel={e => e.currentTarget.blur()}
+                onKeyDown={e => {
+                  if (e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+                }}
+                min={0}
+                className={inputCls}
+              />
             </div>
             <div className="flex gap-3 px-5 pb-5">
               <Button variant="ghost" onClick={closeModal} className="flex-1">Cancel</Button>
@@ -525,7 +813,7 @@ function MyProductsContent() {
               <Trash2 size={36} className="mx-auto text-rose-500 mb-3" />
               <h3 className="font-bold text-slate-900 dark:text-white mb-1">Archive Product?</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                "{selectedProduct.title}" will be archived. Historical orders are preserved.
+                &ldquo;{selectedProduct.title}&rdquo; will be archived. Historical orders are preserved.
               </p>
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={closeModal} className="flex-1">Cancel</Button>
@@ -555,4 +843,3 @@ export default function MyProductsPage() {
     </Suspense>
   );
 }
-
