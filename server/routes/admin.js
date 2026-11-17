@@ -1113,12 +1113,12 @@ router.post('/reports/:id/action', async (req, res) => {
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ success: false, message: 'Report not found.' });
 
-    const note = adminNotes.trim() || reason.trim();
+    const note = adminNotes.trim() || reason.trim() || `Moderation action (${(action || '').replace(/_/g, ' ')}) applied by administrator.`;
     let actionSummary = '';
 
     if (action === 'dismiss') {
       report.status = 'dismissed';
-      report.adminNotes = note || 'Report dismissed after investigation.';
+      report.adminNotes = note;
       actionSummary = 'Report dismissed';
       await logAdminAction({
         req,
@@ -1142,6 +1142,7 @@ router.post('/reports/:id/action', async (req, res) => {
       if (targetUserId) {
         const u = await User.findById(targetUserId);
         if (u) {
+          if (!Array.isArray(u.warnings)) u.warnings = [];
           u.warnings.push({
             reason: note || 'Violation reported and confirmed by moderation',
             issuedBy: req.user._id,
@@ -1167,6 +1168,14 @@ router.post('/reports/:id/action', async (req, res) => {
           p.status = action === 'hide_product' ? 'hidden' : 'removed_by_admin';
           p.adminNotes = note;
           await p.save();
+          await logAdminAction({
+            req,
+            action: action === 'hide_product' ? 'PRODUCT_HIDDEN' : 'PRODUCT_REMOVED',
+            targetType: 'product',
+            targetId: p._id,
+            targetName: p.title || '',
+            reason: note
+          });
         }
       }
       report.status = 'resolved';
@@ -1223,6 +1232,7 @@ router.post('/reports/:id/action', async (req, res) => {
       actionSummary = action === 'suspend_user' ? 'User suspended' : 'User banned';
     } else if (action === 'mark_under_review') {
       report.status = 'under_review';
+      report.actionTaken = 'mark_under_review';
       report.adminNotes = note || 'Under investigation by moderator.';
       actionSummary = 'Report marked under review';
     } else {
@@ -1231,21 +1241,25 @@ router.post('/reports/:id/action', async (req, res) => {
       actionSummary = 'Report resolved';
     }
 
-    report.resolvedBy = req.user._id;
-    report.resolvedAt = new Date();
+    if (action !== 'mark_under_review') {
+      report.resolvedBy = req.user._id;
+      report.resolvedAt = new Date();
+    }
     await report.save();
 
     // Notify the reporter
-    await notify({
-      recipient: report.reporter,
-      type: 'report_update',
-      title: 'Report Update',
-      message: `Your report regarding a ${report.targetType} has been marked as ${report.status}. Thank you for helping keep CUET E-Bazar safe.`
-    });
+    if (report.reporter) {
+      await notify({
+        recipient: report.reporter,
+        type: 'report_update',
+        title: 'Report Update',
+        message: `Your report regarding a ${report.targetType} has been marked as ${report.status}. Thank you for helping keep CUET E-Bazar safe.`
+      });
+    }
 
     await logAdminAction({
       req,
-      action: 'REPORT_RESOLVED',
+      action: action === 'mark_under_review' ? 'REPORT_STATUS_UPDATED' : action === 'dismiss' ? 'REPORT_DISMISSED' : 'REPORT_RESOLVED',
       targetType: 'report',
       targetId: report._id,
       reason: note,

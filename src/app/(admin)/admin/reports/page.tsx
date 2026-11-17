@@ -124,18 +124,24 @@ function ReportsContent() {
  setActionMsg(null);
 
  const token = typeof window !== "undefined" ? localStorage.getItem("cuet_ebazar_token") : null;
- try {
- const res = await fetch(`${API_BASE_URL}/api/admin/reports/${activeReport._id}/action`, {
- method: "POST",
- headers: {
- "Content-Type": "application/json",
- Authorization: `Bearer ${token}`
- },
- body: JSON.stringify({
- action: selectedAction,
- adminNotes,
- durationDays: suspendDays
- })
+    if (!token) {
+      setActionMsg({ type: "error", text: "Admin token missing or session expired. Please log in again." });
+      setActionLoading(false);
+      return;
+    }
+    try {
+      const finalNotes = adminNotes.trim() || `Moderation action (${selectedAction.replace(/_/g, " ")}) applied by administrator.`;
+      const res = await fetch(`${API_BASE_URL}/api/admin/reports/${activeReport._id}/action`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: selectedAction,
+          adminNotes: finalNotes,
+          durationDays: suspendDays
+        })
  });
  const data = await res.json();
 
@@ -360,7 +366,8 @@ function ReportsContent() {
  size="sm"
  onClick={() => {
  setActiveReport(r);
- setSelectedAction(r.status === "pending" ? "mark_under_review" : "dismiss");
+ setSelectedAction(r.targetType === "product" ? "hide_product" : r.status === "pending" ? "mark_under_review" : "dismiss");
+ setActionMsg(null);
  setAdminNotes(r.adminNotes || "");
  }}
  className="h-7 px-2.5 text-[11px] font-semibold bg-red-600 hover:bg-red-700 text-white"
@@ -558,20 +565,49 @@ function ReportsContent() {
  </div>
  )}
 
- {/* Admin Notes */}
- <div>
- <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
- Investigation Findings & Admin Notes *
- </label>
+               {/* Admin Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Investigation Findings & Admin Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    "Item hidden pending seller clarification",
+                    "Violation confirmed - product removed",
+                    "Official warning issued to seller",
+                    "False alarm - authentic listing"
+                  ].map((tpl) => (
+                    <button
+                      key={tpl}
+                      type="button"
+                      onClick={() => setAdminNotes(tpl)}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                    >
+                      + {tpl}
+                    </button>
+                  ))}
+                </div>
  <textarea
  rows={3}
  value={adminNotes}
  onChange={(e) => setAdminNotes(e.target.value)}
  placeholder="Record why this action was taken (visible in activity log and audit history)..."
  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2.5 text-xs outline-none focus:border-red-500"
- required
  />
  </div>
+
+ {actionMsg && (
+ <div
+ className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+ actionMsg.type === "success"
+ ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300"
+ : "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/30 dark:border-red-800 dark:text-red-300"
+ }`}
+ >
+ {actionMsg.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+ <span>{actionMsg.text}</span>
+ </div>
+ )}
 
  <div className="flex items-center justify-end gap-2 pt-2">
  <Button
@@ -586,7 +622,7 @@ function ReportsContent() {
  <Button
  size="sm"
  onClick={handleExecuteAction}
- disabled={actionLoading || !adminNotes.trim()}
+ disabled={actionLoading}
  className="text-xs bg-red-600 hover:bg-red-700 text-white"
  >
  {actionLoading ? (
