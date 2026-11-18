@@ -275,6 +275,35 @@ export async function markGivenAway(id: string): Promise<{ success: boolean; mes
   }
 }
 
+// ── Donor approves a pending claim ──
+export async function approveClaim(id: string): Promise<{ success: boolean; message: string; giveaway?: Giveaway }> {
+  try {
+    const token = getAuthToken();
+    if (!token) return { success: false, message: "Authentication required." };
+
+    const res = await fetch(`${API_BASE_URL}/api/giveaways/${id}/approve`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { success: false, message: data?.message || "Failed to approve claim." };
+    }
+
+    return {
+      success: true,
+      message: data?.message || "Claim approved successfully!",
+      giveaway: data?.giveaway
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || "Network error. Please try again." };
+  }
+}
+
 // ── Fetch giveaways posted by current user (donor) ──
 export async function fetchMyGiveaways(): Promise<{ success: boolean; giveaways: Giveaway[]; message?: string }> {
   try {

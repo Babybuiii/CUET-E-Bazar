@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth";
 import type { Giveaway } from "@/types/giveaway";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -32,12 +33,23 @@ function getTimeLeft(deadline: string): string {
 interface GiveawayCardProps {
   giveaway: Giveaway;
   onClaim: (giveaway: Giveaway) => void;
+  onApprove?: (giveaway: Giveaway) => void;
 }
 
 export function GiveawayCard({
   giveaway,
-  onClaim
+  onClaim,
+  onApprove
 }: GiveawayCardProps) {
+  const { user } = useAuth();
+  const isDonor = Boolean(
+    user && (
+      (user._id && giveaway.donor?._id && String(user._id) === String(giveaway.donor._id)) ||
+      (user.id && giveaway.donor?._id && String(user.id) === String(giveaway.donor._id)) ||
+      (user._id && giveaway.donor && typeof giveaway.donor === "string" && String(user._id) === String(giveaway.donor)) ||
+      (user.id && giveaway.donor && typeof giveaway.donor === "string" && String(user.id) === String(giveaway.donor))
+    )
+  );
   const displayImage = giveaway.images?.[0] || null;
   const timeLeft = getTimeLeft(giveaway.deadline);
 
@@ -49,11 +61,17 @@ export function GiveawayCard({
       textColor: "text-emerald-700 dark:text-emerald-300",
       bgColor: "bg-emerald-50 dark:bg-emerald-950/40"
     },
+    pending: {
+      label: "Pending",
+      dot: "bg-amber-500",
+      textColor: "text-amber-700 dark:text-amber-300",
+      bgColor: "bg-amber-50 dark:bg-amber-950/40"
+    },
     claimed: {
       label: "Claimed",
-      dot: "bg-slate-400",
-      textColor: "text-slate-700 dark:text-slate-300",
-      bgColor: "bg-slate-100 dark:bg-slate-800"
+      dot: "bg-blue-500",
+      textColor: "text-blue-700 dark:text-blue-300",
+      bgColor: "bg-blue-50 dark:bg-blue-950/40"
     },
     given_away: {
       label: "Given Away",
@@ -164,16 +182,38 @@ export function GiveawayCard({
             </div>
           </div>
 
-          {/* Action Button & Status (Constant for all users) */}
+          {/* Action Button & Status */}
           <div className="mt-auto pt-3">
             {giveaway.status === "available" ? (
-              <button
-                type="button"
-                onClick={() => onClaim(giveaway)}
-                className="w-full rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 active:scale-95 px-4 py-2 text-xs font-semibold text-white transition shadow-sm"
-              >
-                Claim Item
-              </button>
+              isDonor ? (
+                <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <span>Your Listing</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onClaim(giveaway)}
+                  className="w-full rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 active:scale-95 px-4 py-2 text-xs font-semibold text-white transition shadow-sm"
+                >
+                  Claim Item
+                </button>
+              )
+            ) : giveaway.status === "pending" ? (
+              isDonor && onApprove ? (
+                <button
+                  type="button"
+                  onClick={() => onApprove(giveaway)}
+                  className="w-full rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 active:scale-95 px-4 py-2 text-xs font-semibold text-white transition shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Approve Claim</span>
+                </button>
+              ) : (
+                <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  <Clock size={13} className="text-amber-500" />
+                  <span>Pending Approval</span>
+                </div>
+              )
             ) : giveaway.status === "claimed" ? (
               <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                 <CheckCircle2 size={13} className="text-slate-500" />

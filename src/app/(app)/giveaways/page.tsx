@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { GiveawayCard } from "@/components/giveaways/GiveawayCard";
 import { OfferGiveawayModal } from "@/components/giveaways/OfferGiveawayModal";
 import { ClaimConfirmationModal } from "@/components/giveaways/ClaimConfirmationModal";
-import { useGiveaways } from "@/hooks/useGiveaways";
+import { useGiveaways, approveClaim } from "@/hooks/useGiveaways";
 import { useAuth } from "@/lib/auth";
 import {
   GIVEAWAY_CATEGORIES,
@@ -81,8 +81,21 @@ export default function GiveawaysPage() {
       updateGiveawayLocally(claimedGiveaway);
     }
     refetch();
-    setToastMessage("Congratulations! You claimed this item. Manage it from your Dashboard.");
+    setToastMessage("Claim request submitted! Status is pending until approved by the owner.");
     setTimeout(() => setToastMessage(null), 4500);
+  }
+
+  async function handleApproveGiveaway(g: Giveaway) {
+    const res = await approveClaim(g._id);
+    if (res.success) {
+      if (res.giveaway) updateGiveawayLocally(res.giveaway);
+      refetch();
+      setToastMessage("Claim approved! The item is now marked as claimed.");
+      setTimeout(() => setToastMessage(null), 4500);
+    } else {
+      setToastMessage(res.message || "Failed to approve claim.");
+      setTimeout(() => setToastMessage(null), 4500);
+    }
   }
 
   // ── Category chip helper ──────────────────────────────────────────────────
@@ -227,6 +240,7 @@ export default function GiveawaysPage() {
                   <GiveawayCard
                     giveaway={g}
                     onClaim={openClaimModal}
+                    onApprove={handleApproveGiveaway}
                   />
                 </motion.div>
               ))}

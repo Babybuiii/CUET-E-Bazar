@@ -36,6 +36,7 @@ import {
   fetchMyClaims,
   unclaimGiveaway,
   markGivenAway,
+  approveClaim,
   cancelGiveaway,
   initiateContact
 } from "@/hooks/useGiveaways";
@@ -286,6 +287,22 @@ export default function SellerDashboardPage() {
     }
   };
 
+  const handleApproveClaim = async (giveawayId: string) => {
+    try {
+      setGiveawayActionId(giveawayId);
+      const res = await approveClaim(giveawayId);
+      if (res.success) {
+        fetchDashboardData();
+      } else {
+        alert(res.message || "Failed to approve claim.");
+      }
+    } catch {
+      alert("Failed to approve claim.");
+    } finally {
+      setGiveawayActionId(null);
+    }
+  };
+
   const handleMarkGivenAway = async (giveawayId: string) => {
     try {
       setGiveawayActionId(giveawayId);
@@ -530,8 +547,10 @@ export default function SellerDashboardPage() {
                                 className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                                   item.status === "available"
                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                    : item.status === "claimed"
+                                    : item.status === "pending"
                                     ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                                    : item.status === "claimed"
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
                                     : item.status === "given_away"
                                     ? "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300"
                                     : "bg-slate-100 text-slate-600"
@@ -552,10 +571,12 @@ export default function SellerDashboardPage() {
                           </div>
                         </div>
 
-                        {/* Claimant Info if claimed */}
-                        {item.status === "claimed" && item.selectedUser && (
+                        {/* Claimant Info if pending or claimed */}
+                        {(item.status === "pending" || item.status === "claimed") && item.selectedUser && (
                           <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-2 text-xs">
-                            <p className="text-[10px] text-slate-400">Claimed by:</p>
+                            <p className="text-[10px] text-slate-400">
+                              {item.status === "pending" ? "Claim requested by:" : "Claimed by:"}
+                            </p>
                             <p className="font-semibold text-slate-800 dark:text-slate-200">
                               {item.selectedUser.fullName}
                               {item.selectedUser.department && (
@@ -570,6 +591,35 @@ export default function SellerDashboardPage() {
 
                       {/* Donor Management Actions */}
                       <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                        {item.status === "pending" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveClaim(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg bg-brand-emerald px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-brand-emerald/90 transition flex items-center gap-1 shadow-sm"
+                            >
+                              <CheckCircle2 size={12} />
+                              Approve Claim
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUnclaimItem(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            >
+                              Decline
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMessageGiveawayContact(item._id)}
+                              disabled={isActionLoading}
+                              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                            >
+                              Message
+                            </button>
+                          </>
+                        )}
                         {item.status === "claimed" && (
                           <>
                             <button
@@ -665,8 +715,18 @@ export default function SellerDashboardPage() {
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <span className="rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                              {item.status.replace("_", " ")}
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                item.status === "pending"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                                  : item.status === "claimed"
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                  : item.status === "given_away"
+                                  ? "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300"
+                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                              }`}
+                            >
+                              {item.status === "pending" ? "Pending Approval" : item.status.replace("_", " ")}
                             </span>
                             <h4 className="mt-1 line-clamp-1 text-xs font-bold text-slate-900 dark:text-white">
                               {item.title}

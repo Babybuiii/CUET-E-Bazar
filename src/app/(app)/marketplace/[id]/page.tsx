@@ -536,7 +536,7 @@ export default function ProductDetailsPage() {
                       setStageZoom(1);
                       setStagePan({ x: 0, y: 0 });
                     }}
-                    className="focus-ring absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 z-10"
+                    className="focus-ring absolute left-3 top-1/2 -translate-y-1/2 aspect-square h-9 w-9 flex items-center justify-center p-0 rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/80 z-10"
                     aria-label="Previous image"
                   >
                     <ChevronLeft size={18} />
@@ -551,7 +551,7 @@ export default function ProductDetailsPage() {
                       setStageZoom(1);
                       setStagePan({ x: 0, y: 0 });
                     }}
-                    className="focus-ring absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 z-10"
+                    className="focus-ring absolute right-3 top-1/2 -translate-y-1/2 aspect-square h-9 w-9 flex items-center justify-center p-0 rounded-full bg-black/50 text-white backdrop-blur-sm transition hover:bg-black/80 z-10"
                     aria-label="Next image"
                   >
                     <ChevronRight size={18} />
@@ -678,7 +678,7 @@ export default function ProductDetailsPage() {
 
               <button
                 onClick={handleToggleSave}
-                className={`focus-ring rounded-full p-2.5 transition border ${
+                className={`focus-ring aspect-square h-11 w-11 flex items-center justify-center rounded-full p-0 transition border shrink-0 ${
                   isSaved
                     ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40"
                     : "border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-slate-500"
@@ -718,63 +718,110 @@ export default function ProductDetailsPage() {
             </div>
 
             {/* Core Actions: Add to Cart (Only for Campus Shop products) & Chat */}
-            <div className="space-y-2.5 pt-3">
+            <div className="space-y-3 pt-3">
               {isShopProduct ? (
-                <Button
-                  onClick={handleAddToCart}
-                  className="w-full bg-[#febd69] hover:bg-[#f3a847] text-[#0f1111] py-6 text-base font-bold shadow-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
-                >
-                  <ShoppingBag size={18} /> Add to Cart (Cash on Delivery)
-                </Button>
+                <div className="space-y-2.5">
+                  <Button
+                    onClick={handleAddToCart}
+                    className="w-full aspect-[16/9] max-h-12 sm:max-h-14 sm:aspect-auto sm:py-5 bg-[#febd69] hover:bg-[#f3a847] text-[#0f1111] text-xs sm:text-sm font-bold shadow-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.01] rounded-xl"
+                  >
+                    <ShoppingBag size={18} className="shrink-0" />
+                    <span>Add to Cart (Cash on Delivery)</span>
+                  </Button>
+
+                  <div className="flex items-center gap-2.5">
+                    <Link
+                      href={`/messages?sellerId=${encodeURIComponent(seller._id || "")}&sellerName=${encodeURIComponent(
+                        shop?.shopName || seller.fullName || "Seller"
+                      )}&productId=${encodeURIComponent(product._id)}&productTitle=${encodeURIComponent(
+                        product.title
+                      )}&productPrice=${encodeURIComponent(product.price)}&productImage=${encodeURIComponent(
+                        images[0]?.thumbnailUrl || images[0]?.url || ""
+                      )}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <Button className="w-full aspect-[16/9] max-h-12 sm:max-h-14 sm:aspect-auto sm:py-5 border-brand-emerald bg-brand-emerald text-white hover:bg-[#0d665f] text-xs sm:text-sm font-semibold shadow-sm transition-all hover:scale-[1.01] rounded-xl flex items-center justify-center gap-2">
+                        <MessageCircle size={18} className="shrink-0" />
+                        <span className="truncate">Chat with {shop ? "Shop Owner" : "Seller"}</span>
+                      </Button>
+                    </Link>
+
+                    <Button
+                      variant="ghost"
+                      className="aspect-square h-12 w-12 sm:h-14 sm:w-14 p-0 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition"
+                      onClick={() => {
+                        if (navigator.clipboard) {
+                          navigator.clipboard.writeText(window.location.href);
+                          alert("Link copied to clipboard!");
+                        }
+                      }}
+                      title="Share Listing"
+                    >
+                      <Share2 size={18} />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="aspect-square h-12 w-12 sm:h-14 sm:w-14 p-0 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-red-50 text-slate-500 hover:text-red-600 dark:hover:bg-red-950/40 flex items-center justify-center transition"
+                      onClick={() => setReportModalOpen(true)}
+                      title="Report Scam or Fake Ad"
+                    >
+                      <Flag size={18} />
+                    </Button>
+                  </div>
+                </div>
               ) : (
-                <div className="rounded-xl border border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/30 p-3 text-xs text-blue-800 dark:text-blue-300 flex items-start gap-2.5">
-                  <Store size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-blue-900 dark:text-blue-200">Individual Seller Listing:</span>{" "}
-                    Cart & delivery are reserved for verified Campus Shops. Please chat with the seller below to arrange a direct meetup & cash handover!
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/30 p-3 text-xs text-blue-800 dark:text-blue-300 flex items-start gap-2.5">
+                    <Store size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-blue-900 dark:text-blue-200">Individual Seller Listing:</span>{" "}
+                      Cart & delivery are reserved for verified Campus Shops. Please chat with the seller below to arrange a direct meetup & cash handover!
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <Link
+                      href={`/messages?sellerId=${encodeURIComponent(seller._id || "")}&sellerName=${encodeURIComponent(
+                        shop?.shopName || seller.fullName || "Seller"
+                      )}&productId=${encodeURIComponent(product._id)}&productTitle=${encodeURIComponent(
+                        product.title
+                      )}&productPrice=${encodeURIComponent(product.price)}&productImage=${encodeURIComponent(
+                        images[0]?.thumbnailUrl || images[0]?.url || ""
+                      )}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <Button className="w-full aspect-[16/9] max-h-12 sm:max-h-14 sm:aspect-auto sm:py-5 border-brand-emerald bg-brand-emerald text-white hover:bg-[#0d665f] text-xs sm:text-sm font-semibold shadow-sm transition-all hover:scale-[1.01] rounded-xl flex items-center justify-center gap-2">
+                        <MessageCircle size={18} className="shrink-0" />
+                        <span className="truncate">Chat with Seller</span>
+                      </Button>
+                    </Link>
+
+                    <Button
+                      variant="ghost"
+                      className="aspect-square h-12 w-12 sm:h-14 sm:w-14 p-0 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition"
+                      onClick={() => {
+                        if (navigator.clipboard) {
+                          navigator.clipboard.writeText(window.location.href);
+                          alert("Link copied to clipboard!");
+                        }
+                      }}
+                      title="Share Listing"
+                    >
+                      <Share2 size={18} />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      className="aspect-square h-12 w-12 sm:h-14 sm:w-14 p-0 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-red-50 text-slate-500 hover:text-red-600 dark:hover:bg-red-950/40 flex items-center justify-center transition"
+                      onClick={() => setReportModalOpen(true)}
+                      title="Report Scam or Fake Ad"
+                    >
+                      <Flag size={18} />
+                    </Button>
                   </div>
                 </div>
               )}
-
-              <div className="flex gap-2">
-                <Link
-                  href={`/messages?sellerId=${encodeURIComponent(seller._id || "")}&sellerName=${encodeURIComponent(
-                    shop?.shopName || seller.fullName || "Seller"
-                  )}&productId=${encodeURIComponent(product._id)}&productTitle=${encodeURIComponent(
-                    product.title
-                  )}&productPrice=${encodeURIComponent(product.price)}&productImage=${encodeURIComponent(
-                    images[0]?.thumbnailUrl || images[0]?.url || ""
-                  )}`}
-                  className="flex-1"
-                >
-                  <Button className={`w-full border-brand-emerald bg-brand-emerald text-white hover:bg-[#0d665f] ${isShopProduct ? "py-5 text-sm" : "py-6 text-base font-bold"} font-semibold shadow-sm transition-all hover:scale-[1.01]`}>
-                    <MessageCircle size={18} className="mr-2" /> Chat with {shop ? "Shop Owner" : "Seller"}
-                  </Button>
-                </Link>
-
-                <Button
-                  variant="ghost"
-                  className={`border border-slate-200 dark:border-slate-700 ${isShopProduct ? "py-5" : "py-6"} px-4 hover:bg-slate-100 dark:hover:bg-slate-800`}
-                  onClick={() => {
-                    if (navigator.clipboard) {
-                      navigator.clipboard.writeText(window.location.href);
-                      alert("Link copied to clipboard!");
-                    }
-                  }}
-                  title="Share Listing"
-                >
-                  <Share2 size={16} />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  className={`border border-slate-200 dark:border-slate-700 ${isShopProduct ? "py-5" : "py-6"} px-4 hover:bg-red-50 text-slate-500 hover:text-red-600 dark:hover:bg-red-950/40`}
-                  onClick={() => setReportModalOpen(true)}
-                  title="Report Scam or Fake Ad"
-                >
-                  <Flag size={16} />
-                </Button>
-              </div>
             </div>
 
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/50 p-3 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 flex items-start gap-2">

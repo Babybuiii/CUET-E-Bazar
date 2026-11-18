@@ -517,16 +517,16 @@ function MyProductsContent() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button onClick={() => openEdit(p)} title="Edit" className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                          <button onClick={() => openEdit(p)} title="Edit" className="aspect-square h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition p-0">
                             <Edit3 size={13} />
                           </button>
-                          <button onClick={() => openStock(p)} title="Update Stock" className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                          <button onClick={() => openStock(p)} title="Update Stock" className="aspect-square h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition p-0">
                             <Package size={13} />
                           </button>
-                          <button onClick={() => handleToggleStatus(p)} title={p.status === "active" ? "Hide" : "Show"} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                          <button onClick={() => handleToggleStatus(p)} title={p.status === "active" ? "Hide" : "Show"} className="aspect-square h-7 w-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition p-0">
                             {p.status === "active" ? <EyeOff size={13} /> : <Eye size={13} />}
                           </button>
-                          <button onClick={() => openDelete(p)} title="Archive" className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
+                          <button onClick={() => openDelete(p)} title="Archive" className="aspect-square h-7 w-7 flex items-center justify-center rounded-lg border border-rose-200 dark:border-rose-800 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition p-0">
                             <Trash2 size={13} />
                           </button>
                         </div>

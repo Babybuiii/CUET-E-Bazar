@@ -67,8 +67,8 @@ const getGiveaways = async (req, res) => {
       ];
     }
 
-    // Exclude the authenticated user's own giveaways so they cannot claim their own listing
-    if (req.user && req.user._id) {
+    // Optionally exclude the authenticated user's own giveaways if excludeOwn is requested
+    if (req.query.excludeOwn === 'true' && req.user && req.user._id) {
       filter.donor = { $ne: req.user._id };
     }
 
@@ -280,11 +280,11 @@ const claimGiveaway = async (req, res) => {
     }
 
     // 2. Pre-check status
-    if (giveaway.status === 'claimed') {
+    if (giveaway.status === 'pending' || giveaway.status === 'claimed') {
       if (giveaway.selectedUser && giveaway.selectedUser.toString() === userId.toString()) {
-        return res.status(409).json({ success: false, message: 'You have already claimed this giveaway.' });
+        return res.status(409).json({ success: false, message: 'You have already requested to claim this giveaway.' });
       }
-      return res.status(409).json({ success: false, message: 'This item has already been claimed by another student.' });
+      return res.status(409).json({ success: false, message: 'This item has already been requested or claimed by another student.' });
     }
 
     if (['expired', 'cancelled'].includes(giveaway.status)) {
@@ -302,7 +302,7 @@ const claimGiveaway = async (req, res) => {
       return res.status(409).json({ success: false, message: 'This item is not available for claiming.' });
     }
 
-    // 3. Atomic FCFS claim update: only one request wins the race condition
+    // 3. Atomic claim update: transitions to 'pending' awaiting donor approval
     const claimed = await Giveaway.findOneAndUpdate(
       {
         _id:          id,
@@ -312,7 +312,7 @@ const claimGiveaway = async (req, res) => {
       },
       {
         $set: {
-          status:       'claimed',
+          status:       'pending',
           selectedUser: userId,
           claimedAt:    new Date()
         },
@@ -351,8 +351,8 @@ const claimGiveaway = async (req, res) => {
       await Notification.create({
         recipient: claimed.donor._id || claimed.donor,
         type:      'giveaway_claimed',
-        title:     'Giveaway Item Claimed!',
-        message:   `Your giveaway item "${claimed.title}" has been claimed by ${claimantName}.`,
+        title:     'Giveaway Claim Requested!',
+        message:   `Your giveaway item "${claimed.title}" has been requested by ${claimantName}. Please approve the claim.`,
         linkType:  'giveaway',
         linkId:    claimed._id,
         claimant:  userId,
@@ -375,7 +375,7 @@ const claimGiveaway = async (req, res) => {
 
     return res.json({
       success:        true,
-      message:        'Congratulations! You have successfully claimed this giveaway item.',
+      message:        'Claim request submitted! Status is pending until approved by the owner.',
       giveaway:       claimed,
       conversationId: conversation?._id || null
     });
@@ -407,10 +407,10 @@ const initiateContact = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Giveaway not found.' });
     }
 
-    if (giveaway.status !== 'claimed' || !giveaway.selectedUser) {
+    if (!['pending', 'claimed'].includes(giveaway.status) || !giveaway.selectedUser) {
       return res.status(409).json({
         success: false,
-        message: 'Direct messaging is only available for claimed giveaways.'
+        message: 'Direct messaging is only available for claimed or pending giveaways.'
       });
     }
 
@@ -483,10 +483,10 @@ const cancelGiveaway = async (req, res) => {
       return res.status(409).json({ success: false, message: 'This giveaway is already unpublished.' });
     }
 
-    if (giveaway.status === 'claimed' || giveaway.selectedUser) {
+    if (['pending', 'claimed'].includes(giveaway.status) || giveaway.selectedUser) {
       return res.status(409).json({
         success: false,
-        message: 'This giveaway has already been claimed and cannot be unpublished.'
+        message: 'This giveaway already has an active claim and cannot be unpublished.'
       });
     }
 
@@ -600,10 +600,10 @@ const unclaimGiveaway = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Giveaway not found.' });
     }
 
-    if (giveaway.status !== 'claimed' || !giveaway.selectedUser) {
+    if (!['pending', 'claimed'].includes(giveaway.status) || !giveaway.selectedUser) {
       return res.status(400).json({
         success: false,
-        message: 'This giveaway is not currently in a claimed state.'
+        message: 'This giveaway is not currently in a pending or claimed state.'
       });
     }
 
@@ -739,6 +739,87 @@ const markGivenAway = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. POST /api/giveaways/:id/approve
+//     Donor or admin approves a pending claim, transitioning it to 'claimed'
+//     Requires authenticate
+// ─────────────────────────────────────────────────────────────────────────────
+const approveClaim = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id.toString();
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid giveaway ID.' });
+    }
+
+    const giveaway = await Giveaway.findById(id)
+      .populate('donor', 'fullName userId department hall avatarUrl isVerified')
+      .populate('selectedUser', 'fullName userId department hall avatarUrl isVerified');
+
+    if (!giveaway) {
+      return res.status(404).json({ success: false, message: 'Giveaway not found.' });
+    }
+
+    const donorId = (giveaway.donor?._id || giveaway.donor).toString();
+    const isDonor = userId === donorId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isDonor && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the giveaway owner can approve this claim.'
+      });
+    }
+
+    if (giveaway.status === 'claimed') {
+      return res.status(400).json({
+        success: false,
+        message: 'This giveaway is already approved as claimed.'
+      });
+    }
+
+    if (giveaway.status !== 'pending' || !giveaway.selectedUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'This giveaway does not have a pending claim to approve.'
+      });
+    }
+
+    giveaway.status = 'claimed';
+    await giveaway.save();
+
+    // Notify the claimant that their claim was approved
+    const claimantId = (giveaway.selectedUser._id || giveaway.selectedUser).toString();
+    try {
+      await Notification.create({
+        recipient: claimantId,
+        type:      'giveaway_update',
+        title:     'Claim Approved!',
+        message:   `The giveaway owner approved your claim for "${giveaway.title}". Please arrange pickup.`,
+        linkType:  'giveaway',
+        linkId:    giveaway._id,
+        metadata: {
+          giveawayId:     giveaway._id,
+          giveawayTitle:  giveaway.title,
+          conversationId: giveaway.conversation || null
+        }
+      });
+    } catch (notifErr) {
+      console.warn('Notification on claim approval failed:', notifErr.message);
+    }
+
+    return res.json({
+      success:  true,
+      message:  'Claim approved successfully! The giveaway is now marked as claimed.',
+      giveaway
+    });
+  } catch (err) {
+    console.error('approveClaim error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to approve claim.' });
+  }
+};
+
 module.exports = {
   getGiveaways,
   getGiveawayById,
@@ -749,5 +830,6 @@ module.exports = {
   getMyGiveaways,
   getMyClaims,
   unclaimGiveaway,
-  markGivenAway
+  markGivenAway,
+  approveClaim
 };

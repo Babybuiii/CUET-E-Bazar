@@ -26,7 +26,8 @@ const {
   getMyGiveaways,
   getMyClaims,
   unclaimGiveaway,
-  markGivenAway
+  markGivenAway,
+  approveClaim
 } = require('../controllers/giveawayController');
 
 // ── Public routes ─────────────────────────────────────────────────────────────
@@ -150,6 +151,23 @@ router.post(
   '/:id/mark-unclaimed',
   authenticate,
   unclaimGiveaway
+);
+
+/**
+ * POST /api/giveaways/:id/approve
+ * POST /api/giveaways/:id/approve-claim
+ * Donor approves pending claim, marking item as claimed.
+ */
+router.post(
+  '/:id/approve',
+  authenticate,
+  approveClaim
+);
+
+router.post(
+  '/:id/approve-claim',
+  authenticate,
+  approveClaim
 );
 
 /**

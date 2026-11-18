@@ -494,7 +494,7 @@ export default function AdminProductsPage() {
  size="sm"
  variant="outline"
  onClick={() => openEditModal(p)}
- className="h-7 px-2 text-[11px]"
+ className="aspect-square h-7 w-7 p-0 flex items-center justify-center text-[11px]"
  title="Edit Product Info"
  >
  <Edit2 size={12} />

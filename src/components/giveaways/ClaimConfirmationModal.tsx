@@ -67,14 +67,14 @@ export function ClaimConfirmationModal({
       } else {
         const item = result.giveaway || {
           ...giveaway,
-          status: "claimed" as const,
+          status: "pending" as const,
           claimedCount: 1
         };
         setClaimedItem(item);
         setConversationId(result.conversationId || item.conversation || null);
-        setResultMsg(result.message || "Congratulations! You have successfully claimed this item.");
+        setResultMsg(result.message || "Claim request submitted! Status is pending until approved by the owner.");
         setSubmitted(true);
-        // Immediately notify parent page so list reflects claimed status
+        // Immediately notify parent page so list reflects pending status
         onSuccess?.(item);
       }
     } catch {
@@ -164,9 +164,9 @@ export function ClaimConfirmationModal({
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Claim Confirmed!</h3>
+                    <h3 className="text-lg font-bold text-slate-900">Claim Request Submitted!</h3>
                     <p className="mt-1 text-xs text-slate-500">
-                      This item is reserved for you. Coordinate pickup with the donor directly.
+                      Status is <span className="font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Pending Approval</span> until the giveaway owner approves your claim.
                     </p>
                   </div>
 
